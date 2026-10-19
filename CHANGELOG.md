@@ -1,0 +1,101 @@
+# Changelog
+
+## 0.1.0
+
+- Added a mobile-first workout tracker with active sessions, exercise search, set logging, notes, completion, and history.
+- Added offline persistence with IndexedDB and an installable PWA service worker.
+- Added authenticated Cloudflare D1 synchronization through a SvelteKit API route.
+- Added responsive desktop navigation and review layouts.
+- Established a reference-led visual system with mist-lilac surfaces, near-white modules, graphite type, vivid vermilion accents, asymmetric fitness cards, IBM Plex Sans interface text, and selective Doto display metrics.
+- Tightened desktop spacing and card proportions, replacing oversized surface radii with a restrained 16px card and 12px field system.
+- Added four realistic first-run workout records and a prepopulated active routine with editable and completed sets.
+- Reworked active tracking into a dense, full-width surface with live duration, volume, and set totals plus edge-to-edge mobile exercise sections.
+- Added a local Hono Cloudflare Worker, persistent Wrangler D1 SQLite state, migration and seed automation, and Vite API proxying under `npm run dev`.
+- Moved sync behavior behind one shared D1 module used by both the local Hono worker and the production SvelteKit route.
+- Made development startup hydrate IndexedDB from local D1 automatically, without uploading stale browser fixtures into the local database.
+- Prevented bundled demonstration workouts from being uploaded when a browser connects to an existing synchronized dataset for the first time.
+- Replaced the production shared sync token with verified Cloudflare Access JWTs, automatic same-origin sync, a development-only local token, and no browser-managed production secret.
+- Added an immediately running `HH:MM:SS` workout timer with one-second updates.
+- Moved session notes out of active tracking and into the finish confirmation, persisting them with the completed workout.
+- Kept active workouts and their elapsed timers running while navigating, with resumable mobile and desktop indicators.
+- Added per-exercise rest durations, persistent exercise notes, RPE tracking, rest countdowns, and completion notifications.
+- Added animated exercise insertion, removal, and accessible reordering controls.
+- Added a persistent custom exercise creator with comprehensive muscle and equipment choices.
+- Added exercise detail pages with weekly progress charts, metric and date-range controls, performance summaries, weight-based personal records, and read-only history.
+- Changed active-workout volume and set totals to recalculate immediately from live set, weight, and repetition edits.
+- Removed placeholder-style dashboard progress math; all dashboard totals, workout totals, exercise statistics, records, and weekly chart points now derive from persisted set data.
+- Added confirmed active-workout cancellation backed by synced cancellation tombstones.
+- Replaced the visible per-set delete column with swipe-to-reveal deletion and an accessible details-panel alternative.
+- Replaced numeric RPE fields with a compact effort-curve picker, added metric header icons, and added unobtrusive per-set failure and note metadata.
+- Moved rest state into one global workout banner with −15-second, +15-second, and Skip controls.
+- Added a dedicated searchable exercise library that shares the custom-exercise form with the workout picker.
+- Added a Videos tab for manually saving validated YouTube links per exercise, with device-local persistence, privacy-enhanced embeds, automatic playback, full-screen presentation, and removal controls.
+- Added reusable routine templates with custom names, ordered exercises, default set counts, rest timers, coaching notes, offline IndexedDB persistence, and Cloudflare D1 synchronization.
+- Set new routine exercises to a two-minute rest and max RPE 10, while omitting progression rules and adaptive targets for cardio, warm-up, and stretching exercises.
+- Added first-class duration and distance tracking for cardio, warm-up, stretching, and dead-hang sets, with time-based active controls, history rows, and exercise summaries instead of weight metrics.
+- Changed workout history sessions to open on a dedicated detail page with a confirmed, synced delete action at the bottom.
+- Remapped imported workout and routine exercise references onto the existing canonical exercise catalog, preserving unmatched mobility movements and custom exercises rather than assigning misleading equivalents.
+- Corrected completed time-based exercises so their duration and distance history appears in exercise detail pages.
+- Repositioned the imported training cycle to Push B after the latest completed Push A, Pull A, and Leg sequence.
+- Increased the authenticated sync request allowance so the complete imported workout archive continues to synchronize as history grows.
+- Restricted readiness and limiting-muscle calculations to anatomical muscle groups; Cardio, Other, and Full body remain exercise categories and no longer appear as muscles.
+- Improved the More → Exercises list with explicit full-row hit targets, pointer/press/focus feedback, and a Back action that returns to the exercise library.
+- Added mobile-style page pushes: drill-ins overlay from right to left, Back slides the current page left to right, and primary tab switches remain immediate.
+- Gave every transitioning page its own full-viewport canvas so forward and Back animations never expose overlapping page content.
+- Backed app screens with URL history so browser controls and the installed PWA’s edge-swipe return to the actual previous screen.
+- Reset the document to the top whenever navigation changes screens, including tab changes and browser/gesture Back navigation.
+- Added bottom-sheet entrances for dialogs and moved confirmation/finish dialogs to the bottom edge on mobile.
+- Completed standalone PWA metadata for iOS and Chromium home-screen installs, including explicit app capability, identity, icons, and display mode.
+- Precached the prerendered LifeOS application shell so an installed PWA can launch and reload without a network connection while continuing to use device-local training data.
+- Restored the stable `/sw.js` registration path so existing home-screen installs migrate from the earlier broken Workbox worker to the current offline cache.
+- Fixed zero-history exercise details so their empty chart state opens correctly instead of making exercise-library rows appear unresponsive.
+- Added a routine-or-custom workout chooser and routine-aware session creation.
+- Added finish-time routine decisions: update the source routine, save the workout structure as a new routine, or keep the completed session as a one-off.
+- Added a dedicated responsive routine library with create, edit, rename, start, and tombstone-backed delete flows.
+- Changed custom one-off workouts to start empty, while routine-backed workouts instantiate their saved exercise order and set structure.
+- Simplified the home screen around today's routine and primary action, with a compact all-muscle recovery board, best-fit routine recommendation, latest workout, and conditional warnings.
+- Replaced the fixed 48-hour recovery flag with muscle-specific recovery windows and stimulus decay derived from completed sets, RPE, failure state, and exact set timestamps; historical records retain a workout-end fallback.
+- Added configurable per-exercise double progression with rep range, load step, and RPE ceiling controls in routine templates.
+- Moved execution targets to their matching active-workout set rows and details: add a rep below the ceiling, increase weight and reset at the ceiling, or repeat after failure or excessive RPE.
+- Added a three-day systemic-fatigue governor that intercepts routine and custom workout starts until the user explicitly chooses Force override.
+- Added one editable training cycle composed from existing routines and explicit recovery slots, including duplication, reordering, manual positioning, and offline persistence.
+- Made cycle advancement completion-driven: linked workout completion and explicit recovery completion advance; cancellation, one-offs, manual routine starts, and missed calendar days do not.
+- Added cycle-aware Today states for the scheduled routine, recovery days, train-anyway overrides, and unavailable-routine repair.
+- Added last-write-wins training-cycle synchronization through IndexedDB, Hono, and a dedicated Cloudflare D1 table.
+- Reworked the home screen into a responsive bento composition with asymmetric calendar, recommendation, history, and workload modules.
+- Replaced the collapsed workload disclosure with independent acute seven-day and chronic weekly-average cards.
+- Added Month, 3-month, 1-year, and scrollable all-time training-calendar ranges; the numbered Month grid identifies routines and mixed-routine days, while denser ranges use a single trained-day color without expandable day details.
+- Normalized workout and exercise histories into neutral, divider-led ledgers; removed the singled-out orange session and decorative LOG circle, added a conventional Start workout action, grouped the archive by month, and progressively rendered older records in bounded batches.
+- Replaced condensed slash-separated exercise results in workout history with explicit per-exercise set counts and numbered weight, repetition, and RPE rows.
+- Replaced exercise-name lists in collapsed workout-history rows with deduplicated muscle groups derived only from exercises that contain completed sets.
+- Expanded the built-in movement catalog from 22 to 279 exercises across chest, back, shoulders, lower body, arms, forearms, core, adductors, abductors, full-body training, and cardio.
+- Qualified every equipment-specific built-in name—such as Dumbbell, Barbell, Cable, Machine, Kettlebell, or Smith Machine—while preserving existing exercise IDs for historical data.
+- Added muscle and equipment filters to the exercise library and workout picker, plus equipment-specific icons for free weights, machines, cables, bodyweight, bands, suspension trainers, medicine balls, plates, cardio, and other equipment.
+- Reordered the home dashboard around the immediate training decision: Today and the workout calendar lead, recovery uses a compact threshold-based muscle matrix, acute and chronic loads remain paired, and recommendation and latest-session cards close the flow.
+- Added fractional secondary-muscle attribution to every built-in movement, custom exercise creation, routine templates, active sessions, readiness calculations, local persistence, and synced workout payloads.
+- Added finish-time whole-session RPE and a systemic-load dashboard using elapsed minutes × session RPE, with recent seven-day and prior four-week values in arbitrary units.
+- Added an evidence-bounded training-science module for RPE-adjusted Epley e1RM, exercise-specific confidence, live next-set autoregulation, rolling hard-set muscle dose, and repeated performance-suppression guidance.
+- Changed hard-set dose to require a logged RPE of 7–10 or failure; missing non-failure effort receives no estimated credit and lowers coverage confidence instead of receiving fabricated partial credit.
+- Added live adaptive targets inside set details, RPE-adjusted strength estimates to workout completion and exercise details, and a responsive home bento for muscle dose and performance guidance.
+- Demoted the target-muscle recent-to-trailing tonnage ratio from a flashing start warning to labeled descriptive context; the app no longer presents it as an optimal or safety band.
+- Added `docs/training-science.md` with calculation contracts, evidence labels, primary research links, confidence rules, and explicit non-diagnostic language boundaries.
+- Replaced the expanded workout-history ledger with the active tracker’s visual grammar: indexed exercise headers, icon-led set columns, compact read-only value cells, and directly visible failure and set-note metadata without redundant RPE charts or per-set disclosures.
+- Reduced the mobile bottom navigation to History, Today, and More; added a dedicated More page for routines, exercises, and data sync while keeping those destinations directly accessible from the desktop sidebar.
+- Simplified the Today header to a centered date, removing the redundant Training label and leading workout icon while retaining the workout action on the right.
+- Restyled the mobile bottom navigation as a compact centered floating capsule with three icon-only destinations and a restrained raised active state.
+- Replaced exercise progress polylines with a reusable monochrome dotted-area chart, including compact metric-aware Y-axis labels and preserved range and metric controls.
+- Switched personal-record repetition counts from the dotted display face to IBM Plex Sans for faster row scanning.
+- Reworked exercise-specific session history to reuse the main archive’s icon-led read-only set grid, compact value cells, and directly visible failure and note metadata.
+- Replaced continuous muscle-readiness tracks with compact twenty-segment 0–100 bars while retaining low-readiness warning color and accessible numeric values.
+- Reused the segmented indicator for productive hard-set equivalents, with metric-correct 0, 1× prior, and 2× prior labels plus exact accessible dose comparisons.
+- Expanded the README and training-science contract into a source-aligned metric guide covering formulas, date windows, rounding, thresholds, segmented scales, confidence, missing data, worked examples, interpretation, and scientific limitations.
+- Reworded performance-suppression guidance as same-exercise history rather than claiming the app verifies protocol comparability.
+- Suppressed hard-set comparison bars when a tiny positive baseline rounds to zero, preventing a misleading full-scale result.
+- Corrected signed performance RPE deltas so negative changes no longer render with a leading plus.
+- Prevented routine cards and cycle editors from forcing phone layouts beyond the viewport while keeping the cycle sequence independently scrollable.
+- Restyled the saved-workout delete action with the solid destructive red treatment.
+- Changed systemic load to prefer recorded session RPE, fall back to the mean completed-set RPE for legacy workouts, ignore treadmill-style sets without RPE, and disclose how many sessions use the estimate.
+- Exposed each muscle-readiness estimate’s latest modeled set units and decay window, and clarified that personal records and subjective soreness are not model inputs.
+- Added an iPhone/iPad post-workout Apple Health export prompt backed by an owner-created Shortcut, x-callback success and error handling, durable local export receipts, and retry controls in saved-workout detail.
+- Replaced JSON-blob D1 persistence with normalized workout, exercise, set, routine, secondary-muscle, and training-cycle tables; added lossless legacy backfill, analytics indexes, transactional aggregate writes, and revision-cursor incremental downloads.
+- Changed PWA registration to target the generated version-changing worker directly, bypass script caches, check immediately, and reload an existing installation once the new worker controls it.

@@ -1,0 +1,12 @@
+name = "lifeos-local-api"
+main = "src/worker/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+LOCAL_SYNC_TOKEN = "lifeos-local-dev"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lifeos"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
