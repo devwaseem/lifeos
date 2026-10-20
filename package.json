@@ -14,7 +14,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "typecheck": "npm run check",
-    "deploy": "npm run build && wrangler pages deploy .svelte-kit/cloudflare",
+    "deploy": "npm run build && wrangler pages deploy .svelte-kit/cloudflare --project-name lifeos --branch production",
     "db:setup:local": "npm run db:migrate:local && npm run db:seed:local",
     "db:migrate:local": "wrangler d1 migrations apply lifeos --local --config wrangler.worker.toml --persist-to .wrangler/state",
     "db:seed:local": "wrangler d1 execute lifeos --local --config wrangler.worker.toml --persist-to .wrangler/state --file scripts/seed-local-d1.sql --yes",
