@@ -160,7 +160,7 @@ SELECT
   json_extract(exercise.value, '$.progression.minReps'),
   json_extract(exercise.value, '$.progression.maxReps'),
   json_extract(exercise.value, '$.progression.weightIncrement'),
-  json_extract(exercise.value, '$.progression.maxRpe')
+  COALESCE(json_extract(exercise.value, '$.progression.maxRpe'), 10)
 FROM workouts_legacy workout, json_each(workout.payload, '$.exercises') exercise;
 
 INSERT INTO workout_exercise_secondary_muscles (workout_exercise_id, position, muscle, fraction)
@@ -223,7 +223,7 @@ SELECT
   json_extract(exercise.value, '$.progression.minReps'),
   json_extract(exercise.value, '$.progression.maxReps'),
   json_extract(exercise.value, '$.progression.weightIncrement'),
-  json_extract(exercise.value, '$.progression.maxRpe')
+  COALESCE(json_extract(exercise.value, '$.progression.maxRpe'), 10)
 FROM routines_legacy routine, json_each(routine.payload, '$.exercises') exercise;
 
 INSERT INTO routine_exercise_secondary_muscles (routine_exercise_id, position, muscle, fraction)
@@ -252,7 +252,7 @@ SELECT
   json_extract(slot.value, '$.id'),
   cycle.id,
   CAST(slot.key AS INTEGER),
-  json_extract(slot.value, '$.type'),
+  COALESCE(json_extract(slot.value, '$.type'), 'routine'),
   json_extract(slot.value, '$.routineId')
 FROM training_cycles_legacy cycle, json_each(cycle.payload, '$.slots') slot;
 

@@ -1,4 +1,4 @@
-import type { RoutineTemplate, SyncSettings, TrainingCycle, WorkoutSession } from '$lib/types'
+import type { RoutineTemplate, SyncSettings, TrainingCycle, TrainingProfile, WorkoutSession } from '$lib/types'
 import { normalizeRoutines } from '$lib/routines'
 import { normalizeTrainingCycle } from '$lib/training-cycle'
 import { normalizeWorkouts } from '$lib/workouts'
@@ -7,6 +7,7 @@ interface SyncResponse {
   workouts: WorkoutSession[]
   routines: RoutineTemplate[]
   trainingCycle: TrainingCycle | null
+  profile: TrainingProfile | null
   cursor: number
   syncedAt: string
 }
@@ -16,6 +17,7 @@ export async function syncData(
   workouts: WorkoutSession[],
   routines: RoutineTemplate[],
   trainingCycle: TrainingCycle | null,
+  profile: TrainingProfile | null = null,
 ) {
   if (!navigator.onLine) throw new Error('You are offline. Your workout is safe on this device.')
 
@@ -29,6 +31,7 @@ export async function syncData(
       workouts,
       routines,
       trainingCycle,
+      profile,
       cursor: settings.syncCursor,
     }),
   })
@@ -74,4 +77,10 @@ export function mergeTrainingCycle(local: TrainingCycle | null, remote: Training
   if (!normalizedLocal) return normalizedRemote
   if (!normalizedRemote) return normalizedLocal
   return normalizedRemote.updatedAt > normalizedLocal.updatedAt ? normalizedRemote : normalizedLocal
+}
+
+export function mergeTrainingProfile(local: TrainingProfile | null, remote: TrainingProfile | null) {
+  if (!local) return remote
+  if (!remote) return local
+  return remote.updatedAt > local.updatedAt ? remote : local
 }

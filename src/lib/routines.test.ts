@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createWorkoutFromRoutine } from './routines'
-import type { RoutineTemplate, WorkoutSession, WorkoutSet } from './types'
+import type { RoutineTemplate, WorkoutCheckIn, WorkoutSession, WorkoutSet } from './types'
 
 function completedSet(id: string, weight: number, reps: number, warmup = false): WorkoutSet {
   return {
@@ -15,6 +15,18 @@ function completedSet(id: string, weight: number, reps: number, warmup = false):
     warmup,
     notes: '',
   }
+}
+
+const checkIn: WorkoutCheckIn = {
+  recordedAt: '2026-10-20T08:00:00.000Z',
+  sleepQuality: 4,
+  energy: 3,
+  soreness: 2,
+  stress: 3,
+  motivation: 4,
+  painPresent: false,
+  illnessPresent: false,
+  notes: 'Ready to train',
 }
 
 const routine: RoutineTemplate = {
@@ -34,7 +46,7 @@ const routine: RoutineTemplate = {
     restSeconds: 120,
     setCount: 3,
     hasWarmupSet: true,
-    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, maxRpe: 9 },
+    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
   }],
 }
 
@@ -49,6 +61,7 @@ const previousWorkout: WorkoutSession = {
   updatedAt: '2026-10-19T09:00:00.000Z',
   notes: '',
   sessionRpe: 8,
+  checkIn: null,
   exercises: [{
     id: 'previous-bench',
     exerciseId: 'bench',
@@ -70,13 +83,14 @@ const previousWorkout: WorkoutSession = {
 
 describe('routine workout set planning', () => {
   it('adds one optional warmup and keeps the configured count as working sets', () => {
-    const workout = createWorkoutFromRoutine(routine, '2026-10-20T08:00:00.000Z', null, [previousWorkout])
+    const workout = createWorkoutFromRoutine(routine, checkIn, '2026-10-20T08:00:00.000Z', null, [previousWorkout])
 
+    expect(workout.checkIn).toEqual(checkIn)
     expect(workout.exercises[0].sets.map((set) => set.warmup)).toEqual([true, false, false, false])
   })
 
   it('prefills each set from the matching previous-workout set and repeats the last known set when needed', () => {
-    const workout = createWorkoutFromRoutine(routine, '2026-10-20T08:00:00.000Z', null, [previousWorkout])
+    const workout = createWorkoutFromRoutine(routine, checkIn, '2026-10-20T08:00:00.000Z', null, [previousWorkout])
 
     expect(workout.exercises[0].sets.map(({ weight, reps, rpe }) => ({ weight, reps, rpe }))).toEqual([
       { weight: 20, reps: 10, rpe: null },

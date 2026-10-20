@@ -113,3 +113,15 @@
 - Restored each active workout’s scroll position when navigating away and back, and made Add set preserve the viewport without opening the new set’s details.
 - Replaced a completed set’s previous/target strip with a Progressed, Maintained, Below previous, or Baseline logged result based on comparable historical performance.
 - Added a non-blocking 2.4-second fullscreen RPE 10 moment with an opaque graphite field, high-contrast max-effort mark, expanding impact lines, and floating flames; it runs only when a failure set is completed, holds long enough to read, and simplifies to a shorter static announcement for reduced-motion users.
+- Replaced per-set Epley/RPE progression outcomes with an exercise-level first-working-set signal: load and repetitions determine Progressed, Maintained, or Declined, while RPE appears as effort context and later sets remain neutral fatigue context.
+- Removed the progression RPE ceiling from routine configuration and synchronized storage; RPE 10 no longer blocks adding a repetition or advancing load after reaching the rep ceiling.
+- Added first-set targets and outcomes to active exercise cards, workout completion, saved workout detail, and exercise history.
+- Added an owner-scoped, read-only Streamable HTTP MCP endpoint with Cloudflare Access JWT authentication, host and origin validation, protected-resource metadata, methodology resources, and bounded training analytics tools.
+- Added high-level MCP results for training overview, exercise progress, routine review, and non-diagnostic training-state context with freshness, confidence, missing-data, and evidence-boundary disclosures.
+- Added a local-first training profile with editable available-equipment and arbitrary excluded-exercise name lists.
+- Added a required subjective check-in before every newly started workout and stored it with that workout for synchronized history and later analysis.
+- Added D1 device-freshness and workout-check-in storage without exposing raw SQL, free-text workout notes, or mutation tools to MCP clients.
+- Added a responsive More → Data & AI surface for synchronization and coaching context.
+- Replaced explicit recovery slots with a routine-only FIFO cycle and configurable consecutive-training-day cadence; unscheduled days off reset the streak without consuming the next routine.
+- Added inferred rest-day guidance to Today while preserving the queued workout, including a deliberate train-anyway action that starts the queued routine.
+- Migrated local and synchronized cycle records by removing legacy rest slots, preserving the next routine, and storing the training-days-before-rest setting.

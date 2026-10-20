@@ -15,7 +15,7 @@ function routineExercise(overrides: Partial<RoutineExercise>): RoutineExercise {
     restSeconds: 120,
     setCount: 1,
     hasWarmupSet: false,
-    progression: { minReps: 8, maxReps: 12, weightIncrement: null, maxRpe: 10 },
+    progression: { minReps: 8, maxReps: 12, weightIncrement: null },
     ...overrides,
   }
 }
@@ -104,7 +104,7 @@ function workoutExercise(id: string, muscle: string, setCount: number): WorkoutE
     notes: '',
     restSeconds: 120,
     restUntil: null,
-    progression: { minReps: 8, maxReps: 12, weightIncrement: 2.5, maxRpe: 10 },
+    progression: { minReps: 8, maxReps: 12, weightIncrement: 2.5 },
     sets: Array.from({ length: setCount }, (_, index) => completedSet(`${id}-${index}`)),
   }
 }
@@ -122,6 +122,7 @@ describe('muscle readiness explanation', () => {
       updatedAt: '2026-10-19T10:00:00.000Z',
       notes: '',
       sessionRpe: null,
+      checkIn: null,
       exercises: [
         workoutExercise('quadriceps', 'Quadriceps', 5),
         workoutExercise('calves', 'Calves', 2),

@@ -29,7 +29,15 @@ Every calculation and UI explanation should expose its evidence status.
 
 A confidence label indicates logged-data completeness only. Comparability still depends on the same exercise ID representing a sufficiently consistent protocol; the app does not verify that condition.
 
-## RPE/RIR-based progression
+## MCP interpretation contract
+
+The MCP analytics surface applies this same evidence boundary. It exposes bounded training summaries, exercise-specific history, routine review, and training-state context; it does not expose SQL, arbitrary database reads, or free-text workout notes.
+
+Every analytics response includes an `asOf` timestamp, source-freshness context, explicit missing inputs, evidence labels, and caveats. Observed subjective check-ins remain distinct from modeled readiness, session-load comparisons, and performance heuristics. The MCP may summarize those signals together, but it MUST NOT collapse them into a medical fatigue, recovery, safety, or injury-risk score.
+
+The MCP is read-only. It may explain possible routine changes in the client conversation, but it cannot store or apply them; routine editing remains a direct user action. Each new workout captures its own pre-workout check-in, keeping the subjective state paired with the resulting session. Pain or illness remains context for cautious interpretation and never generates training clearance or diagnosis.
+
+## First-set performance progression and RPE context
 
 ### Definitions and source-backed use
 
@@ -47,16 +55,26 @@ estimated_RIR = clamp(10 − set_RPE, 0, 4)
 
 Warmup sets are explicitly marked, show RPE as not applicable without exposing the picker, and are excluded from working-set counts, volume, records, progression targets, readiness, muscle dose, and strength estimates. Their stored RPE is always `null`.
 
-Each routine exercise stores a minimum and maximum repetition target, load increment, and RPE ceiling. When a workout starts, each warmup and working set is prefilled from the matching set in the latest completed same-exercise session, including load, repetitions, and working-set RPE; if the new routine has more working sets, the final known working set is repeated. The historical progression target also comes from the corresponding working set:
+Each routine exercise stores a minimum and maximum repetition target plus an optional load increment. When a workout starts, each warmup and working set is prefilled from the matching set in the latest completed same-exercise session, including load, repetitions, and working-set RPE; if the new routine has more working sets, the final known working set is repeated.
 
-- Below the repetition ceiling and below both RPE 10 and the configured effort ceiling: add one repetition.
-- At the repetition ceiling under the same conditions: add one configured load increment and return to the minimum repetitions.
-- RPE 10 always repeats the previous prescription because it represents no repetitions remaining. Only a completed RPE 10 set receives the max-effort indicator; a carried-forward historical RPE does not mark an incomplete set as failed.
-- A prior set with missing RPE may still produce a repetition-based historical target because effort is unknown rather than assumed excessive.
+The progression target applies to the first working set:
 
-Completing or editing an earlier set in the active workout does not alter the displayed previous-workout values or the historical target. Targets are **suggestions** and do not overwrite values after workout creation. The increments, target band, and adjustment rules are product heuristics rather than universal prescriptions.
+- Below the repetition ceiling: keep the load and add one repetition.
+- At the repetition ceiling with a configured load increment: add that increment and return to the minimum repetitions.
+- RPE does not gate either target. In particular, an RPE 10 first set can still produce the next repetition or load target.
 
-Before completion, the set strip shows the immutable previous result and suggested target. After completion, it is replaced by an outcome: **Progressed**, **Maintained**, **Below previous**, or **Baseline logged**. Weighted sets compare Epley load-and-repetition scores; bodyweight sets compare repetitions. Equal performances use RPE as a tiebreaker, where lower effort is progress and higher effort is below previous. Missing or structurally incomparable history produces a baseline instead of a fabricated trend.
+Targets are **suggestions** and do not overwrite values after workout creation. The increments, target band, and adjustment rules are product heuristics rather than universal prescriptions.
+
+The exercise-level progression outcome compares only the completed first non-warmup set with the first working set from the immediately preceding completed same-exercise session:
+
+- At the same external load, more repetitions means **Progressed**, equal repetitions means **Maintained**, and fewer repetitions means **Declined**.
+- Bodyweight sets treat missing and zero external load as equivalent.
+- A prescribed load increase completed at or above the configured minimum repetitions means **Progressed**.
+- A missing prior session means **Baseline logged**. Missing repetitions, an incomplete first set, or an unplanned load change does not fabricate a comparison.
+
+RPE explains the first-set result but never changes its status. Equal RPE is labeled same effort; a difference of at least one full RPE point is labeled lower or higher effort. A half-point difference remains visible in the logged values without receiving an effort label. Later sets retain their load, repetitions, RPE, and previous-session reference as fatigue and work-capacity context, but they never override the exercise-level outcome.
+
+The active workout, finish flow, saved workout detail, and exercise history derive this result from stored workout data. The result itself is not persisted, so edits and deletions recalculate the historical comparison.
 
 ### Limitations
 
@@ -180,7 +198,7 @@ The systemic comparison is the `recent_to_prior_AU_ratio` above: the recent seve
 
 ### Targeted tonnage comparison
 
-Targeted tonnage is a separate external-load proxy scoped to the current Today plan. An active workout takes precedence. Without one, a valid current cycle routine supplies the plan when a cycle is active; a recovery slot or missing cycle routine supplies no target muscles. The manually selected routine is used only while the cycle is inactive.
+Targeted tonnage is a separate external-load proxy scoped to the current Today plan. An active workout takes precedence. Without one, the routine at the head of an active training cycle supplies the plan unless an inferred rest day is due or that routine is missing. The manually selected routine is used only while the cycle is inactive.
 
 ```text
 set_tonnage = max(0, weight) × max(0, repetitions)
@@ -254,6 +272,21 @@ The stimulus weights, six-set normalization, linear decay, fixed windows, and 80
 Personal-record status and subjective soreness are not inputs to this model. A personal record can therefore coexist with a high readiness estimate when the session contains few attributed sets; users must not treat the estimate as overriding how the muscle actually feels.
 
 ## Scheduling heuristics
+
+### FIFO training cycle and inferred rest
+
+A training cycle is an ordered, repeating FIFO queue containing routines only. Completing a workout linked to the routine at the head of the queue advances to the next routine. Cancelling a workout, completing a one-off workout, or taking a day off does not advance the queue.
+
+The cycle stores an editable `training_days_before_rest` value from 1 through 7. LifeOS counts distinct local calendar dates with completed workouts immediately before today. An inferred rest day is due only when:
+
+```text
+today has no completed workout
+and consecutive_training_days_before_today ≥ training_days_before_rest
+```
+
+The rest day is not a routine or queue position. If the user does not train, the condition clears automatically on the following calendar day and the same routine remains next. An earlier non-training day similarly breaks the streak without moving the queue. If the user deliberately trains on an inferred rest day, the queued routine starts normally and advances only after completion.
+
+This cadence is an explicit user scheduling preference. It counts calendar days, not workload, muscle overlap, sleep, symptoms, biological fatigue, recovery, or injury risk.
 
 ### Best-fit routine
 

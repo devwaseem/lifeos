@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft, Cloud, Database, RefreshCw } from '@lucide/svelte'
-  import type { SyncSettings } from '$lib/types'
+  import TrainingProfileForm from './TrainingProfileForm.svelte'
+  import type { SyncSettings, TrainingProfile } from '$lib/types'
   import { formatShortDate, formatTime } from '$lib/utils'
 
   export let initialSettings: SyncSettings
@@ -8,12 +9,14 @@
   export let syncState: 'idle' | 'syncing' | 'success' | 'error'
   export let syncError: string | null
   export let onSync: () => Promise<void>
+  export let trainingProfile: TrainingProfile | null
+  export let onSaveProfile: (profile: TrainingProfile) => void
 </script>
 
 <div class="mx-auto w-full max-w-5xl px-5 py-6 sm:px-6 lg:px-8 lg:py-7">
   <header class="flex items-start gap-3">
     <button class="grid size-11 shrink-0 place-items-center rounded-full border border-ink" on:click={onBack} aria-label="Back to More"><ArrowLeft class="size-5" /></button>
-    <div class="min-w-0"><p class="font-dot text-xs text-accent">SYSTEM</p><h1 class="mt-2 text-2xl font-medium text-balance">Storage & sync</h1><p class="mt-3 max-w-xl text-sm leading-6 text-muted text-pretty">Workouts stay available on this device and sync automatically while your Access session is active.</p></div>
+    <div class="min-w-0"><p class="font-dot text-xs text-accent">SYSTEM</p><h1 class="mt-2 text-2xl font-medium text-balance">Data & AI</h1><p class="mt-3 max-w-xl text-sm leading-6 text-muted text-pretty">Keep training context local-first and synchronize the data your AI client can analyze.</p></div>
   </header>
 
   <section class="mt-8 grid grid-cols-2 gap-3">
@@ -28,4 +31,8 @@
     {#if syncState === 'success'}<p class="mt-5 rounded-xl bg-success-soft px-4 py-3 text-sm text-success" role="status">Local and cloud data are up to date.</p>{/if}
     <button class="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-ink px-5 text-sm font-medium text-paper hover:bg-accent disabled:cursor-wait disabled:bg-panel-deep disabled:text-muted sm:w-auto" type="submit" disabled={syncState === 'syncing'}><RefreshCw class={syncState === 'syncing' ? 'size-4 animate-spin' : 'size-4'} />{syncState === 'syncing' ? 'Syncing…' : 'Sync now'}</button>
   </form>
+
+  <div class="mt-10">
+    <TrainingProfileForm profile={trainingProfile} onSave={onSaveProfile} />
+  </div>
 </div>

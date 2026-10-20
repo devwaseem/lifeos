@@ -6,12 +6,14 @@ LifeOS Training is an offline-first workout journal for planning routines, recor
 
 - Active workout tracking with persistent timers, rest intervals, set notes, and a described RPE 6–10 scale
 - Reusable routines with ordered exercises, optional warmup sets, working-set defaults, coaching notes, and progression rules
-- Completion-driven training cycles with routine and recovery slots
+- FIFO training cycles that advance only on completed workouts and infer rest after a configurable consecutive-training-day count
 - Exercise history, personal records, progress charts, and calendar views
 - Muscle-readiness and workload estimates derived from recorded training data
 - Installable PWA behavior with an offline application shell and local workout access
 - Last-write-wins synchronization for workouts, routines, and training-cycle state
 - Cloudflare Access authentication for production synchronization
+- Owner-scoped MCP analytics for training overview, exercise progress, routine review, and non-diagnostic training-state context
+- Explicit training profiles plus a required pre-workout subjective check-in stored with every newly started workout
 
 Training metrics are descriptive heuristics rather than medical or injury-risk assessments. Their formulas, assumptions, and evidence boundaries are documented in [`docs/training-science.md`](docs/training-science.md).
 
@@ -21,11 +23,17 @@ Training metrics are descriptive heuristics rather than medical or injury-risk a
 flowchart LR
     UI[SvelteKit PWA] --> IDB[(IndexedDB)]
     UI -->|Online synchronization| Access[Cloudflare Access]
-    Access --> API[/SvelteKit sync endpoint/]
-    API --> D1[(Cloudflare D1)]
+    Client[Owner MCP client] -->|Bearer token| Access
+    Access --> Sync[/Sync endpoint/]
+    Access --> MCP[/MCP endpoint/]
+    Sync --> D1[(Cloudflare D1)]
+    MCP --> ReadModel[Bounded analytics read model]
+    ReadModel --> D1
 ```
 
 IndexedDB is authoritative while a workout is in progress. Changes are persisted locally before synchronization, so active sessions remain usable without a network connection. The sync endpoint applies newer records by `updatedAt` and preserves deletion tombstones to prevent stale devices from restoring removed data.
+
+The MCP endpoint deliberately exposes typed, high-level analytics rather than SQL or arbitrary database access. Every MCP tool is read-only and returns source timestamps, confidence and evidence labels, missing-data disclosures, and non-medical caveats. The AI can discuss possible routine changes in its chat, while routine editing remains an explicit user action in LifeOS.
 
 ## Technology
 
@@ -88,8 +96,24 @@ The production runtime requires the following bindings:
 | `DB` | D1 binding | Stores synchronized workouts, routines, and training-cycle state |
 | `CF_ACCESS_TEAM_DOMAIN` | Environment variable | Identifies the Cloudflare Access issuer |
 | `CF_ACCESS_AUD` | Environment variable | Identifies the protected Access application |
+| `MCP_RESOURCE_URL` | Environment variable | Canonical absolute URL of the MCP endpoint |
+| `MCP_ALLOWED_SUBJECT` | Environment variable | Cloudflare Access JWT subject allowed to use this single-owner MCP |
+| `MCP_ALLOWED_HOSTS` | Environment variable | Comma-separated hostnames accepted by MCP DNS-rebinding checks |
+| `MCP_ALLOWED_ORIGINS` | Environment variable | Optional comma-separated browser origins accepted by the MCP endpoint |
+Local development uses `LOCAL_SYNC_TOKEN` and `MCP_LOCAL_TOKEN` from the local Worker configuration. Those credentials are not used by production builds.
 
-Local development uses `LOCAL_SYNC_TOKEN` from the local Worker configuration. That credential is not used by production builds.
+### MCP analytics
+
+The stateless Streamable HTTP endpoint is available at `/mcp`. Every request requires an `Authorization: Bearer …` header. In local development, use the committed development-only `MCP_LOCAL_TOKEN`; in production, pass a valid Cloudflare Access JWT whose subject matches `MCP_ALLOWED_SUBJECT`. The protected-resource metadata endpoint is `/.well-known/oauth-protected-resource/mcp`.
+
+| Tool | Access | Result |
+| --- | --- | --- |
+| `get_training_overview` | Read | Session, routine, cycle, workload, muscle-dose, and freshness overview |
+| `get_exercise_progress` | Read | Bounded same-exercise history and exercise-specific strength context |
+| `review_routine` | Read | Routine structure reviewed against profile constraints and logged training |
+| `get_training_state` | Read | Subjective check-in plus clearly separated modeled readiness and trend signals |
+
+The server also exposes `lifeos://methodology/training-science` and `lifeos://methodology/metric-glossary`. MCP results do not include free-text workout notes and do not expose raw queries or mutation tools. Routine recommendations remain in the AI conversation; apply any change manually through the existing routine editor.
 
 ### Apple Health shortcut
 
@@ -111,13 +135,14 @@ LifeOS passes a versioned payload through Apple’s `shortcuts://run-shortcut` U
 3. Configure the `DB` binding with the deployment-specific database identifier.
 4. Create a Cloudflare Access application for the deployment hostname.
 5. Configure `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` in the Pages environment.
-6. Deploy the application:
+6. Configure `MCP_RESOURCE_URL`, `MCP_ALLOWED_SUBJECT`, `MCP_ALLOWED_HOSTS`, and any browser origins allowed to call MCP.
+7. Deploy the application:
 
    ```bash
    npm run deploy
    ```
 
-7. Confirm that unauthenticated requests are intercepted by Access and that authenticated synchronization succeeds.
+8. Confirm that unauthenticated requests are intercepted by Access, authenticated synchronization succeeds, and an authorized MCP client can initialize and call a read tool.
 
 The production sync endpoint accepts only validated Cloudflare Access assertions. It does not use a browser-managed shared secret.
 
@@ -128,10 +153,12 @@ The application stores these records locally:
 - workouts and their ordered exercises and sets
 - reusable routines and progression settings
 - the active training cycle
+- an explicit training profile
+- a subjective check-in embedded in each newly started workout
 - custom exercise definitions
 - exercise video references
 
-Workouts, routines, and training-cycle records synchronize to normalized D1 tables. Ordered exercises, secondary-muscle contributions, sets, and cycle slots use relational child rows with indexed timestamps, status, exercise, muscle, RPE, and completion fields for direct analytics. A revision cursor returns only records changed since the previous successful sync. Custom exercises and saved video references remain device-local. The synchronization model is designed for one authenticated owner; a multi-user deployment would additionally require identity-scoped records.
+Workouts, their pre-workout check-ins, routines, training-cycle records, and the training profile synchronize to D1. Ordered exercises, secondary-muscle contributions, sets, workout check-ins, and cycle slots use relational child rows with indexed timestamps, status, exercise, muscle, RPE, and completion fields for direct analytics. Device freshness is stored server-side. A revision cursor returns only records changed since the previous successful sync. Custom exercises and saved video references remain device-local. The synchronization and MCP authorization models are designed for one authenticated owner.
 
 ## Project structure
 
@@ -140,10 +167,13 @@ src/lib/components/          Application UI
 src/lib/storage.ts           IndexedDB persistence
 src/lib/sync.ts              Browser synchronization client
 src/lib/server/              Shared D1 synchronization logic
+src/lib/server/mcp/          MCP authentication and typed tool server
+src/lib/server/training-*    Shared analytics and D1 read model
 src/lib/routines.ts          Routine normalization and conversion
 src/lib/training-cycle.ts    Training-cycle state transitions
 src/lib/training-science.ts  Training metric calculations
 src/routes/api/sync/         Production sync endpoint
+src/routes/mcp/              Production Streamable HTTP MCP endpoint
 src/worker/                  Local Worker adapter
 docs/                        Technical and research documentation
 migrations/                  D1 schema migrations

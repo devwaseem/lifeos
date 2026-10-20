@@ -4,6 +4,10 @@ compatibility_date = "2026-10-01"
 
 [vars]
 LOCAL_SYNC_TOKEN = "lifeos-local-dev"
+MCP_LOCAL_TOKEN = "lifeos-mcp-local-dev"
+MCP_RESOURCE_URL = "http://localhost:8787/mcp"
+MCP_ALLOWED_HOSTS = "localhost,127.0.0.1"
+MCP_ALLOWED_ORIGINS = "http://localhost:5173"
 
 [[d1_databases]]
 binding = "DB"

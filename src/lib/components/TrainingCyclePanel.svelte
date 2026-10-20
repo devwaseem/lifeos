@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { ArrowDown, ArrowUp, Moon, Plus, Repeat2, Trash2, X } from '@lucide/svelte'
+  import { ArrowDown, ArrowUp, Plus, Repeat2, Trash2, X } from '@lucide/svelte'
   import { tick } from 'svelte'
   import { flip } from 'svelte/animate'
-  import { addRestCycleSlot, addRoutineCycleSlot, createTrainingCycle, getCurrentCycleSlot } from '$lib/training-cycle'
+  import { addRoutineCycleSlot, createTrainingCycle, getCurrentCycleSlot } from '$lib/training-cycle'
   import type { RoutineTemplate, TrainingCycle, TrainingCycleSlot } from '$lib/types'
   import ConfirmDialog from './ConfirmDialog.svelte'
 
@@ -21,7 +21,6 @@
   $: currentLabel = currentSlot ? slotLabel(currentSlot) : 'Not configured'
 
   function slotLabel(slot: TrainingCycleSlot) {
-    if (slot.type === 'rest') return 'Rest'
     return routines.find((routine) => routine.id === slot.routineId)?.name ?? 'Missing routine'
   }
 
@@ -48,10 +47,6 @@
     draft = { ...draft, slots: [...draft.slots, addRoutineCycleSlot(routineToAdd)] }
   }
 
-  function addRest() {
-    if (!draft) return
-    draft = { ...draft, slots: [...draft.slots, addRestCycleSlot()] }
-  }
 
   function moveSlot(index: number, direction: -1 | 1) {
     if (!draft) return
@@ -82,11 +77,12 @@
     if (!draft || !draft.name.trim() || draft.slots.length === 0) return
     const timestamp = new Date().toISOString()
     const validRoutineIds = new Set(routines.map((routine) => routine.id))
-    const slots = draft.slots.filter((slot) => slot.type === 'rest' || validRoutineIds.has(slot.routineId))
+    const slots = draft.slots.filter((slot) => validRoutineIds.has(slot.routineId))
     if (slots.length === 0) return
     onSave({
       ...draft,
       name: draft.name.trim(),
+      trainingDaysBeforeRest: Math.min(7, Math.max(1, Math.round(draft.trainingDaysBeforeRest))),
       slots,
       currentIndex: Math.min(draft.currentIndex, slots.length - 1),
       updatedAt: timestamp,
@@ -108,7 +104,7 @@
       <div class="min-w-0">
         <div class="flex items-center gap-2 text-accent"><Repeat2 class="size-4" /><p class="font-dot text-xs">TRAINING CYCLE</p></div>
         <h2 id="training-cycle-heading" class="mt-3 truncate text-2xl font-medium">{activeCycle.name}</h2>
-        <div class="mt-6 flex min-w-0 items-end gap-4"><span class="font-dot shrink-0 text-5xl leading-none tabular-nums">{String(activeCycle.currentIndex + 1).padStart(2, '0')}</span><span class="min-w-0 truncate pb-1 text-sm text-panel-deep">of {activeCycle.slots.length} · {currentLabel}</span></div>
+        <div class="mt-6 flex min-w-0 items-end gap-4"><span class="font-dot shrink-0 text-5xl leading-none tabular-nums">{String(activeCycle.currentIndex + 1).padStart(2, '0')}</span><span class="min-w-0 pb-1 text-sm text-panel-deep">of {activeCycle.slots.length} · {currentLabel}<span class="mt-1 block text-xs">{activeCycle.trainingDaysBeforeRest} training days, then rest</span></span></div>
       </div>
       <button class="min-h-12 rounded-xl border border-paper/20 px-5 text-sm font-medium" on:click={openEdit}>Edit cycle</button>
     </div>
@@ -122,7 +118,7 @@
     </div>
   {:else}
     <div class="grid gap-6 p-5 sm:p-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-      <div><div class="flex items-center gap-2 text-accent"><Repeat2 class="size-4" /><p class="font-dot text-xs">TRAINING CYCLE</p></div><h2 id="training-cycle-heading" class="mt-3 text-2xl font-medium">Decide what comes next</h2><p class="mt-2 max-w-xl text-sm leading-6 text-panel-deep">Arrange routines and recovery days into one completion-driven rotation. Missed calendar days never move it without you.</p></div>
+      <div><div class="flex items-center gap-2 text-accent"><Repeat2 class="size-4" /><p class="font-dot text-xs">TRAINING CYCLE</p></div><h2 id="training-cycle-heading" class="mt-3 text-2xl font-medium">Decide what comes next</h2><p class="mt-2 max-w-xl text-sm leading-6 text-panel-deep">Arrange workout routines in a FIFO rotation. Rest is inferred from your consecutive training days and never consumes the next routine.</p></div>
       <button class="min-h-12 rounded-xl bg-accent px-5 text-sm font-medium text-accent-ink" on:click={openCreate}>Build cycle</button>
     </div>
   {/if}
@@ -138,27 +134,26 @@
     <div class="min-w-0 px-5 py-5 sm:px-6">
       <label class="block"><span class="text-xs font-medium uppercase text-muted">Cycle name</span><input bind:value={draft.name} class="mt-2 min-h-12 w-full rounded-xl border-0 bg-canvas px-4 text-base outline-none" aria-label="Cycle name" /></label>
 
-      <div class="mt-7 flex items-end justify-between gap-4"><div><h3 class="text-sm font-medium">Sequence</h3><p class="mt-1 text-xs text-muted">The highlighted slot is next.</p></div><span class="font-dot text-xl">{draft.slots.length}</span></div>
+      <label class="mt-5 block"><span class="text-xs font-medium uppercase text-muted">Training days before rest</span><input bind:value={draft.trainingDaysBeforeRest} class="mt-2 min-h-12 w-full rounded-xl border-0 bg-canvas px-4 text-base outline-none" type="number" min="1" max="7" inputmode="numeric" aria-describedby="cadence-description" /><span id="cadence-description" class="mt-2 block text-xs leading-5 text-muted">After this many consecutive training days, the next calendar day is shown as rest. Any earlier day off resets the count.</span></label>
+
+      <div class="mt-7 flex items-end justify-between gap-4"><div><h3 class="text-sm font-medium">Routine queue</h3><p class="mt-1 text-xs text-muted">The highlighted routine is next. Only completed workouts advance it.</p></div><span class="font-dot text-xl">{draft.slots.length}</span></div>
       {#if draft.slots.length > 0}
         <div class="mt-3 space-y-2">
           {#each draft.slots as slot, index (slot.id)}
             <div animate:flip={{ duration: 180 }} class:active-draft-slot={index === draft.currentIndex} class="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-xl bg-canvas p-2">
               <button class="font-dot grid size-10 place-items-center rounded-full text-xs" class:current-index={index === draft.currentIndex} on:click={() => { if (draft) draft = { ...draft, currentIndex: index } }} aria-label={`Set ${slotLabel(slot)} as current slot`}>{String(index + 1).padStart(2, '0')}</button>
-              <div class="min-w-0"><p class="truncate text-sm font-medium">{slotLabel(slot)}</p><p class="mt-0.5 text-[0.6875rem] uppercase text-muted">{slot.type === 'rest' ? 'Recovery' : index === draft.currentIndex ? 'Current' : 'Routine'}</p></div>
+              <div class="min-w-0"><p class="truncate text-sm font-medium">{slotLabel(slot)}</p><p class="mt-0.5 text-[0.6875rem] uppercase text-muted">{index === draft.currentIndex ? 'Next' : 'Routine'}</p></div>
               <div class="flex shrink-0"><button class="grid size-10 place-items-center rounded-full text-muted disabled:opacity-25" disabled={index === 0} on:click={() => moveSlot(index, -1)} aria-label={`Move ${slotLabel(slot)} up`}><ArrowUp class="size-4" /></button><button class="grid size-10 place-items-center rounded-full text-muted disabled:opacity-25" disabled={index === draft.slots.length - 1} on:click={() => moveSlot(index, 1)} aria-label={`Move ${slotLabel(slot)} down`}><ArrowDown class="size-4" /></button><button class="grid size-10 place-items-center rounded-full text-danger" on:click={() => removeSlot(slot.id)} aria-label={`Remove ${slotLabel(slot)}`}><Trash2 class="size-4" /></button></div>
             </div>
           {/each}
         </div>
       {:else}
-        <p class="mt-3 rounded-xl bg-canvas px-4 py-6 text-sm leading-6 text-muted">Add a routine or recovery day to begin the rotation.</p>
+        <p class="mt-3 rounded-xl bg-canvas px-4 py-6 text-sm leading-6 text-muted">Add at least one routine to begin the queue.</p>
       {/if}
 
-      <div class="mt-5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <div class="grid grid-cols-[minmax(0,1fr)_auto] rounded-xl bg-canvas p-1">
-          <label class="min-w-0"><span class="sr-only">Routine to add</span><select bind:value={routineToAdd} class="min-h-11 w-full bg-transparent px-3 text-sm outline-none" aria-label="Routine to add"><option value="" disabled>Select routine</option>{#each routines as routine (routine.id)}<option value={routine.id}>{routine.name}</option>{/each}</select></label>
-          <button class="flex min-h-11 items-center gap-2 rounded-lg bg-ink px-4 text-sm font-medium text-paper disabled:opacity-40" disabled={!routineToAdd} on:click={addRoutine}><Plus class="size-4" /> Add</button>
-        </div>
-        <button class="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-panel px-4 text-sm font-medium" on:click={addRest}><Moon class="size-4" /> Add rest</button>
+      <div class="mt-5 grid grid-cols-[minmax(0,1fr)_auto] rounded-xl bg-canvas p-1">
+        <label class="min-w-0"><span class="sr-only">Routine to add</span><select bind:value={routineToAdd} class="min-h-11 w-full bg-transparent px-3 text-sm outline-none" aria-label="Routine to add"><option value="" disabled>Select routine</option>{#each routines as routine (routine.id)}<option value={routine.id}>{routine.name}</option>{/each}</select></label>
+        <button class="flex min-h-11 items-center gap-2 rounded-lg bg-ink px-4 text-sm font-medium text-paper disabled:opacity-40" disabled={!routineToAdd} on:click={addRoutine}><Plus class="size-4" /> Add</button>
       </div>
 
       <button class="mt-7 min-h-12 w-full rounded-xl bg-accent px-5 text-sm font-medium text-accent-ink disabled:bg-panel disabled:text-muted" disabled={!draft.name.trim() || draft.slots.length === 0} on:click={saveDraft}>Save training cycle</button>

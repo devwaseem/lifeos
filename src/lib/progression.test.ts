@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSetProgressionTargets, defaultProgressionRule, getSetProgressionOutcome, supportsProgression, type SetProgressionTarget } from './progression'
+import { buildExerciseProgressionResults, buildSetProgressionTargets, defaultProgressionRule, supportsProgression } from './progression'
 import { DEFAULT_REST_SECONDS } from './workouts'
 import type { WorkoutSession } from './types'
 
@@ -18,8 +18,8 @@ describe('exercise progression eligibility', () => {
     expect(supportsProgression({ name: 'Bench Press', muscle: 'Chest' })).toBe(true)
   })
 
-  it('defaults progressive exercises to max RPE 10 and two-minute rest', () => {
-    expect(defaultProgressionRule('Barbell').maxRpe).toBe(10)
+  it('defaults progressive exercises to an 8–12 rep band and two-minute rest', () => {
+    expect(defaultProgressionRule('Barbell')).toEqual({ minReps: 8, maxReps: 12, weightIncrement: 2.5 })
     expect(DEFAULT_REST_SECONDS).toBe(120)
   })
 
@@ -35,6 +35,7 @@ describe('exercise progression eligibility', () => {
       updatedAt: '2026-10-20T00:00:00.000Z',
       notes: '',
       sessionRpe: null,
+      checkIn: null,
       exercises: [{
         id: 'workout-exercise',
         exerciseId: 'treadmill',
@@ -65,6 +66,37 @@ describe('exercise progression eligibility', () => {
   })
 })
 
+  function workout(id: string, startedAt: string, firstReps: number, secondReps: number, rpe = 10): WorkoutSession {
+    return {
+      id,
+      title: 'Push',
+      routineId: null,
+      cycleSlotId: null,
+      status: 'completed',
+      startedAt,
+      completedAt: startedAt,
+      updatedAt: startedAt,
+      notes: '',
+      sessionRpe: 8,
+      checkIn: null,
+      exercises: [{
+        id: `${id}-bench`,
+        exerciseId: 'bench',
+        name: 'Bench Press',
+        muscle: 'Chest',
+        equipment: 'Barbell',
+        secondaryMuscles: [],
+        notes: '',
+        restSeconds: 120,
+        restUntil: null,
+        progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+        sets: [
+          { id: `${id}-1`, weight: 80, reps: firstReps, rpe, durationSeconds: null, distanceMeters: null, completed: true, completedAt: startedAt, warmup: false, notes: '' },
+          { id: `${id}-2`, weight: 80, reps: secondReps, rpe: 10, durationSeconds: null, distanceMeters: null, completed: true, completedAt: startedAt, warmup: false, notes: '' },
+        ],
+      }],
+    }
+  }
 describe('historical progression targets', () => {
   it('matches working sets across a warmup and does not replace previous values with live-set data', () => {
     const historicalSet = (id: string, reps: number, warmup = false) => ({
@@ -90,6 +122,7 @@ describe('historical progression targets', () => {
       updatedAt: '2026-10-19T09:00:00.000Z',
       notes: '',
       sessionRpe: 8,
+      checkIn: null,
       exercises: [{
         id: 'previous-bench',
         exerciseId: 'bench',
@@ -100,7 +133,7 @@ describe('historical progression targets', () => {
         notes: '',
         restSeconds: 120,
         restUntil: null,
-        progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, maxRpe: 9 },
+        progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
         sets: [historicalSet('previous-warmup', 10, true), historicalSet('previous-1', 8), historicalSet('previous-2', 7)],
       }],
     }
@@ -130,49 +163,116 @@ describe('historical progression targets', () => {
       previousReps: 7,
     })
   })
+
+  it('adds load after reaching the rep ceiling at RPE 10', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 10, 7)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 10, 6)
+    current.status = 'active'
+    current.completedAt = null
+
+    const targets = buildSetProgressionTargets(current, [current, previous])
+
+    expect(targets.get('current-1')).toMatchObject({
+      action: 'increase-load',
+      targetWeight: 82.5,
+      targetReps: 6,
+    })
+  })
 })
 
-describe('completed set progression outcomes', () => {
-  const target: SetProgressionTarget = {
-    setId: 'set',
-    setIndex: 0,
-    previousWeight: 80,
-    previousReps: 8,
-    previousRpe: 8,
-    targetWeight: 80,
-    targetReps: 9,
-    action: 'add-rep',
-    rule: { minReps: 6, maxReps: 10, weightIncrement: 2.5, maxRpe: 9 },
-  }
 
-  const completedSet = {
-    id: 'set',
-    weight: 80,
-    reps: 8,
-    rpe: 8,
-    durationSeconds: null,
-    distanceMeters: null,
-    completed: true,
-    completedAt: '2026-10-20T08:30:00.000Z',
-    warmup: false,
-    notes: '',
-  } as const
+describe('first-set exercise progression', () => {
 
-  it.each([
-    [{ ...completedSet, reps: 9 }, 'progressed'],
-    [{ ...completedSet, rpe: 7.5 }, 'progressed'],
-    [completedSet, 'maintained'],
-    [{ ...completedSet, reps: 7 }, 'below-previous'],
-    [{ ...completedSet, rpe: 9 }, 'below-previous'],
-  ] as const)('classifies a comparable result as %s', (set, expected) => {
-    expect(getSetProgressionOutcome(set, target)).toBe(expected)
+  it('progresses when the first working set gains a rep even if a later set loses reps', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 8, 7)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 9, 6)
+
+    expect(buildExerciseProgressionResults(current, [current, previous]).get('current-bench')).toMatchObject({
+      status: 'progressed',
+      repDelta: 1,
+      effortTrend: 'same',
+    })
   })
 
-  it('reports a baseline without a comparable historical set', () => {
-    expect(getSetProgressionOutcome(completedSet, { ...target, previousWeight: null, previousReps: null, previousRpe: null })).toBe('baseline')
+  it('maintains first-set performance and reports meaningfully lower effort', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 8, 7, 10)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 8, 9, 9)
+
+    expect(buildExerciseProgressionResults(current, [current, previous]).get('current-bench')).toMatchObject({
+      status: 'maintained',
+      repDelta: 0,
+      effortTrend: 'lower',
+    })
   })
 
-  it('does not classify incomplete sets', () => {
-    expect(getSetProgressionOutcome({ ...completedSet, completed: false }, target)).toBeNull()
+  it('declines when the first set loses a rep even if later sets improve', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 8, 7)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 7, 9)
+
+    expect(buildExerciseProgressionResults(current, [current, previous]).get('current-bench')).toMatchObject({
+      status: 'declined',
+      repDelta: -1,
+    })
+  })
+
+  it('recognizes a prescribed load increase at the configured minimum repetitions', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 10, 7)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 6, 6)
+    current.exercises[0].sets[0].weight = 82.5
+
+    expect(buildExerciseProgressionResults(current, [current, previous]).get('current-bench')).toMatchObject({
+      status: 'progressed',
+      repDelta: null,
+      target: { action: 'increase-load', targetWeight: 82.5, targetReps: 6 },
+    })
+  })
+
+  it('does not fabricate a comparison for an unplanned load change', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 8, 7)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 8, 7)
+    current.exercises[0].sets[0].weight = 85
+
+    expect(buildExerciseProgressionResults(current, [current, previous]).get('current-bench')).toMatchObject({
+      status: 'not-comparable',
+      repDelta: null,
+    })
+  })
+
+  it('keeps progression pending until the actual first working set is completed', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 8, 7)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 9, 8)
+    current.exercises[0].sets[0].completed = false
+
+    expect(buildExerciseProgressionResults(current, [current, previous]).get('current-bench')).toMatchObject({
+      status: 'pending',
+      repDelta: null,
+    })
+  })
+
+  it('uses only earlier sessions and establishes a baseline without one', () => {
+    const older = workout('older', '2026-10-18T08:00:00.000Z', 7, 6)
+    const current = workout('current', '2026-10-19T08:00:00.000Z', 8, 7)
+    const future = workout('future', '2026-10-20T08:00:00.000Z', 10, 8)
+
+    expect(buildExerciseProgressionResults(current, [future, current, older]).get('current-bench')).toMatchObject({
+      status: 'progressed',
+      previousSet: { id: 'older-1' },
+    })
+    expect(buildExerciseProgressionResults(older, [future, current, older]).get('older-bench')).toMatchObject({
+      status: 'baseline',
+      previousSet: null,
+    })
+  })
+
+  it('compares bodyweight sets when null and zero both represent external load', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 8, 7)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 9, 6)
+    previous.exercises[0].sets[0].weight = null
+    current.exercises[0].sets[0].weight = 0
+
+    expect(buildExerciseProgressionResults(current, [current, previous]).get('current-bench')).toMatchObject({
+      status: 'progressed',
+      repDelta: 1,
+    })
   })
 })

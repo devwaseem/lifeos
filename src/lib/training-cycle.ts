@@ -1,4 +1,5 @@
 import type { RoutineTemplate, TrainingCycle, TrainingCycleSlot, WorkoutSession } from '$lib/types'
+import { getConsecutiveLoadDays } from '$lib/training-readiness'
 import { newId } from '$lib/utils'
 
 export const PRIMARY_TRAINING_CYCLE_ID = 'primary-training-cycle'
@@ -11,23 +12,36 @@ export function createTrainingCycle(timestamp = new Date().toISOString()): Train
     updatedAt: timestamp,
     deletedAt: null,
     currentIndex: 0,
+    trainingDaysBeforeRest: 3,
     slots: [],
   }
 }
 
 export function normalizeTrainingCycle(cycle: TrainingCycle): TrainingCycle {
-  const rawSlots = Array.isArray(cycle.slots) ? cycle.slots : []
-  const slots = rawSlots.flatMap((slot, index): TrainingCycleSlot[] => {
-    if (!slot || typeof slot !== 'object') return []
-    const id = typeof slot.id === 'string' && slot.id ? slot.id : `${cycle.id}-slot-${index}`
-    if (slot.type === 'rest') return [{ id, type: 'rest', routineId: null }]
-    if (slot.type === 'routine' && typeof slot.routineId === 'string' && slot.routineId) {
-      return [{ id, type: 'routine', routineId: slot.routineId }]
+  const rawSlots = Array.isArray(cycle.slots) ? cycle.slots as unknown[] : []
+  const candidates = rawSlots.map((value, index): TrainingCycleSlot | null => {
+    if (!value || typeof value !== 'object') return null
+    const slot = value as { id?: unknown; type?: unknown; routineId?: unknown }
+    if (slot.type === 'rest' || typeof slot.routineId !== 'string' || !slot.routineId) return null
+    if (slot.type !== undefined && slot.type !== 'routine') return null
+    return {
+      id: typeof slot.id === 'string' && slot.id ? slot.id : `${cycle.id}-slot-${index}`,
+      routineId: slot.routineId,
     }
-    return []
   })
-  const requestedIndex = Number.isFinite(cycle.currentIndex) ? Math.round(cycle.currentIndex) : 0
-  const currentIndex = slots.length > 0 ? Math.min(slots.length - 1, Math.max(0, requestedIndex)) : 0
+  const slots = candidates.filter((slot): slot is TrainingCycleSlot => slot !== null)
+  const requestedIndex = rawSlots.length > 0 && Number.isFinite(cycle.currentIndex)
+    ? Math.min(rawSlots.length - 1, Math.max(0, Math.round(cycle.currentIndex)))
+    : 0
+  const nextRawSlot = rawSlots.length > 0
+    ? Array.from({ length: rawSlots.length }, (_, offset) => candidates[(requestedIndex + offset) % rawSlots.length])
+        .find((slot): slot is TrainingCycleSlot => slot !== null)
+    : null
+  const mappedIndex = nextRawSlot ? slots.findIndex((slot) => slot.id === nextRawSlot.id) : -1
+  const currentIndex = mappedIndex >= 0 ? mappedIndex : 0
+  const requestedTrainingDays = Number.isFinite(cycle.trainingDaysBeforeRest)
+    ? Math.round(cycle.trainingDaysBeforeRest)
+    : 3
 
   return {
     id: typeof cycle.id === 'string' && cycle.id ? cycle.id : PRIMARY_TRAINING_CYCLE_ID,
@@ -36,6 +50,7 @@ export function normalizeTrainingCycle(cycle: TrainingCycle): TrainingCycle {
     updatedAt: typeof cycle.updatedAt === 'string' ? cycle.updatedAt : new Date(0).toISOString(),
     deletedAt: typeof cycle.deletedAt === 'string' ? cycle.deletedAt : null,
     currentIndex,
+    trainingDaysBeforeRest: Math.min(7, Math.max(1, requestedTrainingDays)),
     slots,
   }
 }
@@ -50,7 +65,7 @@ export function getCycleRoutine(
   routines: RoutineTemplate[],
 ) {
   const slot = getCurrentCycleSlot(cycle)
-  if (!slot || slot.type !== 'routine') return null
+  if (!slot) return null
   return routines.find((routine) => routine.id === slot.routineId && !routine.deletedAt) ?? null
 }
 
@@ -96,7 +111,7 @@ export function removeRoutineFromTrainingCycle(
 ) {
   const normalized = normalizeTrainingCycle(cycle)
   const currentSlot = getCurrentCycleSlot(normalized)
-  const slots = normalized.slots.filter((slot) => slot.type !== 'routine' || slot.routineId !== routineId)
+  const slots = normalized.slots.filter((slot) => slot.routineId !== routineId)
   if (slots.length === normalized.slots.length) return normalized
   const retainedCurrentIndex = currentSlot ? slots.findIndex((slot) => slot.id === currentSlot.id) : -1
   const currentIndex = slots.length === 0
@@ -108,9 +123,37 @@ export function removeRoutineFromTrainingCycle(
 }
 
 export function addRoutineCycleSlot(routineId: string): TrainingCycleSlot {
-  return { id: newId(), type: 'routine', routineId }
+  return { id: newId(), routineId }
 }
 
-export function addRestCycleSlot(): TrainingCycleSlot {
-  return { id: newId(), type: 'rest', routineId: null }
+function localDateKey(timestamp: number) {
+  const date = new Date(timestamp)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function getTrainingCycleState(
+  cycle: TrainingCycle | null | undefined,
+  workouts: WorkoutSession[],
+  now = Date.now(),
+) {
+  const normalized = cycle ? normalizeTrainingCycle(cycle) : null
+  const consecutiveTrainingDays = getConsecutiveLoadDays(workouts, now)
+  const today = localDateKey(now)
+  const trainedToday = workouts.some((workout) => {
+    if (workout.status !== 'completed') return false
+    const timestamp = new Date(workout.completedAt ?? workout.startedAt).getTime()
+    return Number.isFinite(timestamp) && localDateKey(timestamp) === today
+  })
+  const trainingDaysBeforeRest = normalized?.trainingDaysBeforeRest ?? 3
+
+  return {
+    consecutiveTrainingDays,
+    restDue: Boolean(normalized && !normalized.deletedAt && normalized.slots.length > 0)
+      && !trainedToday
+      && consecutiveTrainingDays >= trainingDaysBeforeRest,
+    trainingDaysBeforeRest,
+  }
 }

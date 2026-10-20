@@ -15,19 +15,21 @@
   import SettingsView from '$lib/components/SettingsView.svelte'
   import TodayView from '$lib/components/TodayView.svelte'
   import WorkoutStartDialog from '$lib/components/WorkoutStartDialog.svelte'
+  import WorkoutCheckInDialog from '$lib/components/WorkoutCheckInDialog.svelte'
   import { createDemoWorkouts } from '$lib/data/demo-workouts'
   import { createOneOffWorkout, createWorkoutFromRoutine, routineFromWorkout } from '$lib/routines'
-  import { deleteAppleHealthExport, deleteExerciseVideo, getAppleHealthExports, getCustomExercises, getExerciseVideos, getRoutines, getSyncSettings, getTrainingCycle, getWorkouts, replaceRoutines, replaceTrainingCycle, replaceWorkouts, saveAppleHealthExport, saveCustomExercise, saveExerciseVideo, saveRoutine, saveSyncSettings, saveTrainingCycle, saveWorkout } from '$lib/storage'
-  import { mergeRoutines, mergeTrainingCycle, mergeWorkouts, syncData } from '$lib/sync'
-  import { advanceTrainingCycle, advanceTrainingCycleForWorkout, removeRoutineFromTrainingCycle } from '$lib/training-cycle'
+  import { deleteAppleHealthExport, deleteExerciseVideo, getAppleHealthExports, getCustomExercises, getExerciseVideos, getRoutines, getSyncSettings, getTrainingCycle, getTrainingProfile, getWorkouts, replaceRoutines, replaceTrainingCycle, replaceTrainingProfile, replaceWorkouts, saveAppleHealthExport, saveCustomExercise, saveExerciseVideo, saveRoutine, saveSyncSettings, saveTrainingCycle, saveTrainingProfile, saveWorkout } from '$lib/storage'
+  import { mergeRoutines, mergeTrainingCycle, mergeTrainingProfile, mergeWorkouts, syncData } from '$lib/sync'
+  import { advanceTrainingCycleForWorkout, removeRoutineFromTrainingCycle } from '$lib/training-cycle'
   import { getConsecutiveLoadDays } from '$lib/training-readiness'
-  import type { AppView, ExerciseDefinition, ExerciseVideo, RoutineTemplate, SyncSettings, TrainingCycle, WorkoutFinishDecision, WorkoutSession } from '$lib/types'
+  import type { AppView, ExerciseDefinition, ExerciseVideo, RoutineTemplate, SyncSettings, TrainingCycle, TrainingProfile, WorkoutCheckIn, WorkoutFinishDecision, WorkoutSession } from '$lib/types'
 
   let view: AppView = 'today'
   let workouts: WorkoutSession[] = []
   let customExercises: ExerciseDefinition[] = []
   let routines: RoutineTemplate[] = []
   let trainingCycle: TrainingCycle | null = null
+  let trainingProfile: TrainingProfile | null = null
   let exerciseVideos: ExerciseVideo[] = []
   let selectedExerciseId = ''
   let selectedExerciseName = ''
@@ -47,6 +49,8 @@
   let startDialog: WorkoutStartDialog
   let fatigueDialog: ConfirmDialog
   let workoutCompleteDialog: WorkoutCompleteDialog
+  let checkInDialog: WorkoutCheckInDialog
+  let pendingWorkoutStart: { kind: 'routine'; routine: RoutineTemplate; cycleSlotId: string | null } | { kind: 'custom' } | null = null
   let selectedRoutineId = ''
   const TODAY_ROUTINE_KEY = 'lifeos-today-routine-id'
   const notifiedRestTimers = new Set<string>()
@@ -310,8 +314,8 @@
     window.addEventListener('offline', handleOffline)
     window.addEventListener('popstate', handlePopState)
 
-    Promise.all([getWorkouts(), getRoutines(), getTrainingCycle(), getSyncSettings(), getCustomExercises(), getExerciseVideos(), getAppleHealthExports()])
-      .then(async ([storedWorkouts, storedRoutines, storedTrainingCycle, storedSettings, storedCustomExercises, storedExerciseVideos, storedAppleHealthExports]) => {
+    Promise.all([getWorkouts(), getRoutines(), getTrainingCycle(), getSyncSettings(), getCustomExercises(), getExerciseVideos(), getAppleHealthExports(), getTrainingProfile()])
+      .then(async ([storedWorkouts, storedRoutines, storedTrainingCycle, storedSettings, storedCustomExercises, storedExerciseVideos, storedAppleHealthExports, storedTrainingProfile]) => {
         if (cancelled) return
         const demoWorkouts = createDemoWorkouts()
         demoWorkouts.forEach((workout) => demoWorkoutIds.add(workout.id))
@@ -339,6 +343,7 @@
         customExercises = storedCustomExercises
         exerciseVideos = storedExerciseVideos
         appleHealthExports = storedAppleHealthExports
+        trainingProfile = storedTrainingProfile
 
         if (canSync) {
           const synced = await performSync(
@@ -346,12 +351,14 @@
             shouldPullDevelopmentData ? [] : storedUserWorkouts,
             shouldPullDevelopmentData ? [] : storedRoutines,
             shouldPullDevelopmentData ? null : storedTrainingCycle,
+            shouldPullDevelopmentData ? null : storedTrainingProfile,
             !shouldPullDevelopmentData,
           )
           if (!synced && !cancelled) {
             workouts = initialWorkouts
             routines = storedRoutines
             trainingCycle = storedTrainingCycle
+            trainingProfile = storedTrainingProfile
             ensureSelectedRoutine(storedRoutines)
           } else if (import.meta.env.DEV && !cancelled && workouts.length === 0) {
             workouts = hydratedDemos
@@ -417,6 +424,7 @@
     nextWorkouts = workouts,
     nextRoutines = routines,
     nextTrainingCycle = trainingCycle,
+    nextTrainingProfile = trainingProfile,
     mergeLocalData = true,
   ) {
     syncState = 'syncing'
@@ -427,20 +435,24 @@
         nextWorkouts,
         nextRoutines,
         nextTrainingCycle,
+        nextTrainingProfile,
       )
       const mergedWorkouts = mergeWorkouts(mergeLocalData ? nextWorkouts : [], response.workouts)
       const mergedRoutines = mergeRoutines(mergeLocalData ? nextRoutines : [], response.routines)
       const mergedTrainingCycle = mergeTrainingCycle(mergeLocalData ? nextTrainingCycle : null, response.trainingCycle ?? null)
+      const mergedTrainingProfile = mergeTrainingProfile(mergeLocalData ? nextTrainingProfile : null, response.profile ?? null)
       const updatedSettings = { ...nextSettings, lastSyncedAt: response.syncedAt, syncCursor: response.cursor }
       await Promise.all([
         replaceWorkouts(mergedWorkouts),
         replaceRoutines(mergedRoutines),
         replaceTrainingCycle(mergedTrainingCycle),
         saveSyncSettings(updatedSettings),
+        replaceTrainingProfile(mergedTrainingProfile),
       ])
       workouts = mergedWorkouts
       routines = mergedRoutines
       trainingCycle = mergedTrainingCycle
+      trainingProfile = mergedTrainingProfile
       ensureSelectedRoutine(mergedRoutines)
       settings = updatedSettings
       syncState = 'success'
@@ -484,6 +496,13 @@
     await performSync(settingsWithDevice, workouts.filter((workout) => !demoWorkoutIds.has(workout.id)), routines)
   }
 
+  function storeTrainingProfile(profile: TrainingProfile) {
+    trainingProfile = profile
+    saveTrainingProfile(profile).catch(() => { dataError = 'The training profile could not be saved locally.' })
+    if (navigator.onLine) void performSync(settings, workouts, routines, trainingCycle, profile)
+  }
+
+
   function requestWorkoutStart() {
     if (activeWorkout) { navigate('workout'); return }
     startDialog.open()
@@ -491,11 +510,8 @@
 
   function startRoutine(routine: RoutineTemplate, cycleSlotId: string | null = null) {
     if (activeWorkout) { navigate('workout'); return }
-    const workout = createWorkoutFromRoutine(routine, new Date().toISOString(), cycleSlotId, workouts)
-    selectTodayRoutine(routine.id)
-    workouts = [workout, ...workouts]
-    saveWorkout(workout).catch(() => { dataError = 'This workout could not be saved locally.' })
-    navigate('workout')
+    pendingWorkoutStart = { kind: 'routine', routine, cycleSlotId }
+    checkInDialog.open()
   }
 
   function startCycleRoutine(routine: RoutineTemplate, slotId: string) {
@@ -517,9 +533,24 @@
       fatigueDialog.open()
       return
     }
-    const hour = new Date().getHours()
-    const daypart = hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening'
-    const workout = createOneOffWorkout(`${daypart} workout`)
+    pendingWorkoutStart = { kind: 'custom' }
+    checkInDialog.open()
+  }
+
+  function startCheckedInWorkout(checkIn: WorkoutCheckIn) {
+    const pending = pendingWorkoutStart
+    pendingWorkoutStart = null
+    if (!pending || activeWorkout) return
+
+    let workout: WorkoutSession
+    if (pending.kind === 'routine') {
+      workout = createWorkoutFromRoutine(pending.routine, checkIn, checkIn.recordedAt, pending.cycleSlotId, workouts)
+      selectTodayRoutine(pending.routine.id)
+    } else {
+      const hour = new Date(checkIn.recordedAt).getHours()
+      const daypart = hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening'
+      workout = createOneOffWorkout(`${daypart} workout`, checkIn, checkIn.recordedAt)
+    }
     workouts = [workout, ...workouts]
     saveWorkout(workout).catch(() => { dataError = 'This workout could not be saved locally.' })
     navigate('workout')
@@ -601,15 +632,6 @@
     storeTrainingCycle({ ...cycle, updatedAt: timestamp, deletedAt: timestamp })
   }
 
-  function completeRestDay(slotId: string) {
-    if (!trainingCycle) return
-    const timestamp = new Date().toISOString()
-    const advanced = advanceTrainingCycle(trainingCycle, slotId, timestamp)
-    if (advanced.updatedAt !== timestamp) return
-    trainingCycle = advanced
-    saveTrainingCycle(advanced).catch(() => { dataError = 'The completed recovery day could not be saved locally.' })
-    if (navigator.onLine) void performSync(settings, workouts, routines, advanced)
-  }
 
   function deleteRoutine(routine: RoutineTemplate) {
     if (selectedRoutineId === routine.id) {
@@ -723,11 +745,11 @@
       {#key view}
         <div class="page-panel" in:pageIn out:pageOut>
           {#if view === 'today'}
-            <TodayView {workouts} routines={visibleRoutines} {activeWorkout} {trainingCycle} {selectedRoutineId} {now} onSelectRoutine={selectTodayRoutine} onStartRoutine={startRoutine} onStartCycleRoutine={startCycleRoutine} onCompleteRest={completeRestDay} onStart={requestWorkoutStart} onResume={() => navigate('workout')} onManageRoutines={() => navigate('routines')} onViewHistory={() => navigate('history')} />
+            <TodayView {workouts} routines={visibleRoutines} {activeWorkout} {trainingCycle} {selectedRoutineId} {now} onSelectRoutine={selectTodayRoutine} onStartRoutine={startRoutine} onStartCycleRoutine={startCycleRoutine} onStart={requestWorkoutStart} onResume={() => navigate('workout')} onManageRoutines={() => navigate('routines')} onViewHistory={() => navigate('history')} />
           {:else if view === 'history'}
             <HistoryView {workouts} onStart={requestWorkoutStart} onOpenWorkout={openWorkout} />
           {:else if view === 'workout-history' && selectedWorkout}
-            <WorkoutHistoryDetailView workout={selectedWorkout} appleHealthExport={selectedAppleHealthExport} {canExportToAppleHealth} onExportAppleHealth={() => { void exportWorkoutToAppleHealth(selectedWorkout) }} onBack={() => navigateBack('history')} onOpenExercise={openExercise} onDelete={deleteSavedWorkout} />
+            <WorkoutHistoryDetailView workout={selectedWorkout} {workouts} appleHealthExport={selectedAppleHealthExport} {canExportToAppleHealth} onExportAppleHealth={() => { void exportWorkoutToAppleHealth(selectedWorkout) }} onBack={() => navigateBack('history')} onOpenExercise={openExercise} onDelete={deleteSavedWorkout} />
           {:else if view === 'more'}
             <MoreView {online} {syncLabel} onNavigate={navigate} />
           {:else if view === 'routines'}
@@ -735,7 +757,17 @@
           {:else if view === 'exercises'}
             <ExerciseLibraryView {customExercises} onBack={() => navigateBack('more')} onCreate={createExercise} onOpenExercise={openExercise} />
           {:else if view === 'settings'}
-            {#key `${settings.deviceId}:${settings.lastSyncedAt ?? 'never'}`}<SettingsView initialSettings={settings} {syncState} {syncError} onBack={() => navigateBack('more')} onSync={handleSync} />{/key}
+            {#key `${settings.deviceId}:${settings.lastSyncedAt ?? 'never'}:${trainingProfile?.updatedAt ?? 'no-profile'}`}
+              <SettingsView
+                initialSettings={settings}
+                {syncState}
+                {syncError}
+                {trainingProfile}
+                onBack={() => navigateBack('more')}
+                onSync={handleSync}
+                onSaveProfile={storeTrainingProfile}
+              />
+            {/key}
           {:else if view === 'exercise' && selectedExerciseId}
             <ExerciseDetailView exerciseId={selectedExerciseId} exerciseName={selectedExerciseName} {workouts} videos={exerciseVideos.filter((video) => video.exerciseId === selectedExerciseId)} onSaveVideo={addExerciseVideo} onDeleteVideo={removeExerciseVideo} onBack={() => navigateBack(exerciseBackView)} />
           {:else if view === 'workout' && activeWorkout}
@@ -748,6 +780,7 @@
 {/if}
 
 <WorkoutStartDialog bind:this={startDialog} routines={visibleRoutines} onSelectRoutine={requestRoutineStart} onCustom={startCustomWorkout} onManageRoutines={() => navigate('routines')} />
+<WorkoutCheckInDialog bind:this={checkInDialog} onSubmit={startCheckedInWorkout} onCancel={() => { pendingWorkoutStart = null }} />
 <ConfirmDialog bind:this={fatigueDialog} eyebrow="Heuristic governor" title="Systemic fatigue warning" description="Three or more consecutive training days are logged. Continue only if this additional load is intentional and recovery is adequate." confirmLabel="Force override" onConfirm={() => startCustomWorkout(true)} />
 <WorkoutCompleteDialog bind:this={workoutCompleteDialog} workout={completedWorkoutForHealth} canExport={canExportToAppleHealth} error={appleHealthActionError} onExport={exportWorkoutToAppleHealth} />
 

@@ -1,17 +1,18 @@
 import type { AppleHealthExportRecord } from '$lib/apple-health'
-import type { ExerciseDefinition, ExerciseVideo, RoutineTemplate, SyncSettings, TrainingCycle, WorkoutSession } from '$lib/types'
+import type { ExerciseDefinition, ExerciseVideo, RoutineTemplate, SyncSettings, TrainingCycle, TrainingProfile, WorkoutSession } from '$lib/types'
 import { normalizeExerciseDefinition } from '$lib/muscle-contributions'
 import { normalizeRoutines } from '$lib/routines'
 import { normalizeTrainingCycle } from '$lib/training-cycle'
 import { normalizeWorkouts } from '$lib/workouts'
 
 const DATABASE_NAME = 'lifeos-training'
-const DATABASE_VERSION = 5
+const DATABASE_VERSION = 8
 const WORKOUTS_STORE = 'workouts'
 const ROUTINES_STORE = 'routines'
 const TRAINING_CYCLE_STORE = 'training-cycle'
 const CUSTOM_EXERCISES_STORE = 'custom-exercises'
 const EXERCISE_VIDEOS_STORE = 'exercise-videos'
+const TRAINING_PROFILE_STORE = 'training-profile'
 const META_STORE = 'meta'
 const SETTINGS_KEY = 'sync-settings'
 const APPLE_HEALTH_EXPORTS_KEY = 'apple-health-exports'
@@ -64,6 +65,12 @@ function openDatabase() {
     }
     if (!database.objectStoreNames.contains(EXERCISE_VIDEOS_STORE)) {
       database.createObjectStore(EXERCISE_VIDEOS_STORE, { keyPath: 'id' })
+    }
+    if (!database.objectStoreNames.contains(TRAINING_PROFILE_STORE)) {
+      database.createObjectStore(TRAINING_PROFILE_STORE, { keyPath: 'id' })
+    }
+    for (const obsoleteStore of ['training-checkins', 'routine-proposals']) {
+      if (database.objectStoreNames.contains(obsoleteStore)) database.deleteObjectStore(obsoleteStore)
     }
     if (!database.objectStoreNames.contains(META_STORE)) {
       database.createObjectStore(META_STORE, { keyPath: 'key' })
@@ -148,6 +155,33 @@ export async function replaceTrainingCycle(cycle: TrainingCycle | null) {
   if (cycle) store.put(cycle)
   await transactionComplete(transaction)
 }
+
+export async function getTrainingProfile() {
+  const database = await openDatabase()
+  const transaction = database.transaction(TRAINING_PROFILE_STORE, 'readonly')
+  const profile = await requestResult(
+    transaction.objectStore(TRAINING_PROFILE_STORE).get('primary-training-profile') as IDBRequest<TrainingProfile | undefined>,
+  )
+  await transactionComplete(transaction)
+  return profile ?? null
+}
+
+export async function saveTrainingProfile(profile: TrainingProfile) {
+  const database = await openDatabase()
+  const transaction = database.transaction(TRAINING_PROFILE_STORE, 'readwrite')
+  transaction.objectStore(TRAINING_PROFILE_STORE).put(profile)
+  await transactionComplete(transaction)
+}
+
+export async function replaceTrainingProfile(profile: TrainingProfile | null) {
+  const database = await openDatabase()
+  const transaction = database.transaction(TRAINING_PROFILE_STORE, 'readwrite')
+  const store = transaction.objectStore(TRAINING_PROFILE_STORE)
+  store.clear()
+  if (profile) store.put(profile)
+  await transactionComplete(transaction)
+}
+
 
 export async function getCustomExercises() {
   const database = await openDatabase()

@@ -1,10 +1,31 @@
 import { parseSetDistanceMeters, parseSetDurationSeconds } from '$lib/exercise-tracking'
 import { isValidRpe } from '$lib/rpe'
-import type { WorkoutExercise, WorkoutSession, WorkoutSet } from '$lib/types'
+import type { WorkoutCheckIn, WorkoutExercise, WorkoutSession, WorkoutSet } from '$lib/types'
 import { normalizeProgressionRule } from '$lib/progression'
 import { resolveSecondaryMuscles } from '$lib/muscle-contributions'
 
 export const DEFAULT_REST_SECONDS = 120
+
+function normalizeCheckIn(value: unknown): WorkoutCheckIn | null {
+  if (!value || typeof value !== 'object') return null
+  const checkIn = value as Partial<WorkoutCheckIn>
+  const ratings = [checkIn.sleepQuality, checkIn.energy, checkIn.soreness, checkIn.stress, checkIn.motivation]
+  if (typeof checkIn.recordedAt !== 'string'
+    || !ratings.every((rating) => Number.isInteger(rating) && (rating ?? 0) >= 1 && (rating ?? 0) <= 5)
+    || typeof checkIn.painPresent !== 'boolean'
+    || typeof checkIn.illnessPresent !== 'boolean') return null
+  return {
+    recordedAt: checkIn.recordedAt,
+    sleepQuality: checkIn.sleepQuality!,
+    energy: checkIn.energy!,
+    soreness: checkIn.soreness!,
+    stress: checkIn.stress!,
+    motivation: checkIn.motivation!,
+    painPresent: checkIn.painPresent,
+    illnessPresent: checkIn.illnessPresent,
+    notes: typeof checkIn.notes === 'string' ? checkIn.notes : '',
+  }
+}
 
 function normalizeSet(set: WorkoutSet & { failure?: unknown }): WorkoutSet {
   const { failure: legacyFailure, ...current } = set
@@ -45,6 +66,7 @@ export function normalizeWorkout(workout: WorkoutSession): WorkoutSession {
     cycleSlotId: typeof workout.cycleSlotId === 'string' ? workout.cycleSlotId : null,
     notes: typeof workout.notes === 'string' ? workout.notes : '',
     sessionRpe: isValidRpe(workout.sessionRpe) ? workout.sessionRpe : null,
+    checkIn: normalizeCheckIn(workout.checkIn),
     exercises: workout.exercises.map(normalizeExercise),
   }
 }

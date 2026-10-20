@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { ArrowRight, Check, ChevronDown, CircleDot, Flame, MessageSquare, Minus, Trash2, TrendingDown, TrendingUp } from '@lucide/svelte'
+  import { Check, ChevronDown, Flame, MessageSquare, Trash2 } from '@lucide/svelte'
   import { fly } from 'svelte/transition'
   import { formatSetDuration } from '$lib/exercise-tracking'
   import type { ExerciseTrackingMode } from '$lib/exercise-tracking'
-  import { getSetProgressionOutcome, type SetProgressionOutcome, type SetProgressionTarget } from '$lib/progression'
+  import type { SetProgressionTarget } from '$lib/progression'
   import type { WorkoutSet } from '$lib/types'
   import RpeCurve from './RpeCurve.svelte'
 
@@ -53,19 +53,6 @@
     return `${weight === null || weight === 0 ? 'BW' : `${weight}kg`} × ${reps}`
   }
 
-  function progressionReason(target: SetProgressionTarget) {
-    if (target.action === 'increase-load') return 'Rep ceiling reached—advance the load.'
-    if (target.action === 'add-rep') return 'Keep the load and add one repetition.'
-    if (target.action === 'repeat') return 'Repeat this prescription before progressing.'
-    return 'Complete this set to establish its baseline.'
-  }
-
-  function progressionOutcomeLabel(outcome: SetProgressionOutcome) {
-    if (outcome === 'progressed') return 'Progressed'
-    if (outcome === 'maintained') return 'Maintained'
-    if (outcome === 'below-previous') return 'Below previous'
-    return 'Baseline logged'
-  }
 
   function startSwipe(event: PointerEvent) {
     if (event.pointerType === 'mouse' && event.button !== 0) return
@@ -120,7 +107,6 @@
   $: hasMetadata = Boolean(set.notes.trim())
   let maxEffortPulse = 0
   $: maxEffort = !set.warmup && set.completed && set.rpe === 10
-  $: progressionOutcome = progressionTarget ? getSetProgressionOutcome(set, progressionTarget) : null
   $: setLabel = set.warmup ? 'warmup set' : `set ${setNumber ?? setIndex + 1}`
   $: revealed = offset < 0
 </script>
@@ -172,33 +158,15 @@
       {/if}
       <button type="button" class:completed-control={set.completed} class="detail-control grid size-11 place-items-center rounded-full" on:click={() => onExpandedChange(!expanded)} aria-label={`${expanded ? 'Close' : 'Open'} details for ${exerciseName}, ${setLabel}`} aria-expanded={expanded}><ChevronDown class={`size-5 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} /></button>
     </div>
-    {#if trackingMode === 'strength' && progressionOutcome}
-      <div class={`outcome-strip ${progressionOutcome}`} aria-label={`Progression: ${progressionOutcomeLabel(progressionOutcome)}`}>
-        {#if progressionOutcome === 'progressed'}<TrendingUp class="size-3.5" />
-        {:else if progressionOutcome === 'maintained'}<Minus class="size-3.5" />
-        {:else if progressionOutcome === 'below-previous'}<TrendingDown class="size-3.5" />
-        {:else}<CircleDot class="size-3.5" />{/if}
-        <span><span class="target-label">Progression</span><span class="outcome-label">{progressionOutcomeLabel(progressionOutcome)}</span></span>
-        <span class="outcome-result">{formatPerformance(set.weight, set.reps)}</span>
-      </div>
-    {:else if trackingMode === 'strength' && progressionTarget && progressionTarget.previousReps !== null}
-      <div class="target-strip">
-        <span><span class="target-label">Prev</span>{formatPerformance(progressionTarget.previousWeight, progressionTarget.previousReps)}</span>
-        <ArrowRight class="size-3.5 text-muted" />
-        <span class="text-accent-strong"><span class="target-label">Target</span>{formatPerformance(progressionTarget.targetWeight, progressionTarget.targetReps)}</span>
-      </div>
-    {/if}
   </div>
 
   {#if expanded}
+    {@const previousTarget = progressionTarget}
     <div class="relative z-10 border-t border-rule bg-paper px-2 pb-3 pt-2" in:fly={{ y: -6, duration: 180 }}>
-      {#if trackingMode === 'strength' && progressionTarget && !set.completed}
-        <section class="mb-3 rounded-xl bg-canvas p-3" aria-label={`Progression target for ${exerciseName}, ${setLabel}`}>
-          <p class="text-[0.625rem] font-medium uppercase text-muted">Progression target</p>
-          <p class="mt-1 text-sm font-medium">{progressionReason(progressionTarget)}</p>
-          {#if progressionTarget.previousReps !== null || progressionTarget.targetReps !== null}
-            <div class="mt-3 flex items-center gap-2 text-sm tabular-nums"><span>{formatPerformance(progressionTarget.previousWeight, progressionTarget.previousReps)}</span><ArrowRight class="size-4 text-muted" /><span class="font-medium text-accent-strong">{formatPerformance(progressionTarget.targetWeight, progressionTarget.targetReps)}</span></div>
-          {/if}
+      {#if trackingMode === 'strength' && previousTarget && previousTarget.previousReps !== null && setNumber !== 1}
+        <section class="mb-3 rounded-xl bg-canvas p-3" aria-label={`Previous result for ${exerciseName}, ${setLabel}`}>
+          <p class="text-[0.625rem] font-medium uppercase text-muted">Last session · Set {setNumber}</p>
+          <p class="mt-1 text-sm font-medium tabular-nums">{formatPerformance(previousTarget.previousWeight, previousTarget.previousReps)}{#if previousTarget.previousRpe !== null}<span class="font-normal text-muted"> · RPE {previousTarget.previousRpe}</span>{/if}</p>
         </section>
       {/if}
       {#if trackingMode === 'strength' && !set.warmup}<RpeCurve value={set.rpe} disabled={false} onChange={handleRpeChange} />{/if}
@@ -224,15 +192,6 @@
   .set-grid.strength { grid-template-columns: 1.5rem repeat(3, minmax(2.75rem, 1fr)) 2.75rem; }
   .set-grid.duration { grid-template-columns: 1.5rem minmax(5rem, 1fr) 2.75rem; }
   .set-grid.distance-duration { grid-template-columns: 1.5rem repeat(2, minmax(4.5rem, 1fr)) 2.75rem; }
-  .target-strip, .outcome-strip { display: flex; min-height: 1.9rem; align-items: center; gap: 0.5rem; border-top: 1px solid var(--color-rule); padding: 0.35rem 0.5rem 0.45rem; font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
-  .target-strip { justify-content: center; }
-  .outcome-strip { padding-inline: 0.75rem; }
-  .outcome-strip.progressed { color: var(--color-success); }
-  .outcome-strip.below-previous { color: var(--color-danger); }
-  .outcome-strip.maintained, .outcome-strip.baseline { color: var(--color-ink); }
-  .outcome-label { font-weight: 600; }
-  .outcome-result { margin-inline-start: auto; color: var(--color-muted); }
-  .target-label { margin-inline-end: 0.3rem; color: var(--color-muted); font-size: 0.5625rem; font-weight: 600; text-transform: uppercase; }
   .set-input, .rpe-button, .warmup-rpe { min-height: 2.75rem; min-width: 0; border: 0; border-radius: 0.75rem; background: var(--color-canvas); padding-inline: 0.25rem; text-align: center; font-size: 1rem; font-weight: 500; font-variant-numeric: tabular-nums; outline: none; }
   .warmup-rpe { display: grid; place-items: center; font-size: 0.625rem; font-weight: 600; letter-spacing: 0.04em; }
   @media (min-width: 640px) and (hover: hover) and (pointer: fine) { .set-input:focus-visible, .rpe-button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; } }

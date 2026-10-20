@@ -1,4 +1,4 @@
-import type { ExerciseDefinition, RoutineExercise, RoutineTemplate, WorkoutExercise, WorkoutSession } from '$lib/types'
+import type { ExerciseDefinition, RoutineExercise, RoutineTemplate, WorkoutCheckIn, WorkoutExercise, WorkoutSession } from '$lib/types'
 import { defaultProgressionRule, normalizeProgressionRule } from '$lib/progression'
 import { resolveSecondaryMuscles } from '$lib/muscle-contributions'
 import { newId } from '$lib/utils'
@@ -86,6 +86,7 @@ function workoutExerciseFromRoutine(
 
 export function createWorkoutFromRoutine(
   routine: RoutineTemplate,
+  checkIn: WorkoutCheckIn,
   timestamp = new Date().toISOString(),
   cycleSlotId: string | null = null,
   workouts: WorkoutSession[] = [],
@@ -101,6 +102,7 @@ export function createWorkoutFromRoutine(
     updatedAt: timestamp,
     notes: '',
     sessionRpe: null,
+    checkIn,
     exercises: routine.exercises.map((exercise) => workoutExerciseFromRoutine(
       exercise,
       getPreviousWorkoutExercise(workouts, exercise.exerciseId),
@@ -108,7 +110,7 @@ export function createWorkoutFromRoutine(
   }
 }
 
-export function createOneOffWorkout(title: string, timestamp = new Date().toISOString()): WorkoutSession {
+export function createOneOffWorkout(title: string, checkIn: WorkoutCheckIn, timestamp = new Date().toISOString()): WorkoutSession {
   return {
     id: newId(),
     title,
@@ -120,6 +122,7 @@ export function createOneOffWorkout(title: string, timestamp = new Date().toISOS
     updatedAt: timestamp,
     notes: '',
     sessionRpe: null,
+    checkIn,
     exercises: [],
   }
 }
@@ -136,7 +139,6 @@ export function routineMatchesWorkout(routine: RoutineTemplate, workout: Workout
       && template.progression.minReps === exercise.progression.minReps
       && template.progression.maxReps === exercise.progression.maxReps
       && template.progression.weightIncrement === exercise.progression.weightIncrement
-      && template.progression.maxRpe === exercise.progression.maxRpe
       && normalizeSetCount(template.setCount) === countWorkingSets(exercise.sets)
       && template.hasWarmupSet === exercise.sets.some((set) => set.warmup)
   })

@@ -14,6 +14,7 @@ function completedTimedWorkout(): WorkoutSession {
     updatedAt: '2026-10-19T08:30:00.000Z',
     notes: '',
     sessionRpe: null,
+    checkIn: null,
     exercises: [{
       id: 'workout-exercise',
       exerciseId: 'machine-treadmill-walk',
@@ -24,7 +25,7 @@ function completedTimedWorkout(): WorkoutSession {
       notes: '',
       restSeconds: 120,
       restUntil: null,
-      progression: { minReps: 8, maxReps: 12, weightIncrement: 2.5, maxRpe: 10 },
+      progression: { minReps: 8, maxReps: 12, weightIncrement: 2.5 },
       sets: [{
         id: 'set',
         weight: null,

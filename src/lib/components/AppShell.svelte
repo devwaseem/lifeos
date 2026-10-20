@@ -32,7 +32,7 @@
       <button class:active-nav={view === 'history' || view === 'workout-history'} class="side-nav" on:click={() => onNavigate('history')} aria-current={view === 'history' || view === 'workout-history' ? 'page' : undefined}><CalendarDays class="size-4" />History</button>
       <button class:active-nav={view === 'routines'} class="side-nav" on:click={() => onNavigate('routines')} aria-current={view === 'routines' ? 'page' : undefined}><Layers3 class="size-4" />Routines</button>
       <button class:active-nav={view === 'exercises' || view === 'exercise'} class="side-nav" on:click={() => onNavigate('exercises')} aria-current={view === 'exercises' || view === 'exercise' ? 'page' : undefined}><Library class="size-4" />Exercises</button>
-      <button class:active-nav={view === 'settings'} class="side-nav" on:click={() => onNavigate('settings')} aria-current={view === 'settings' ? 'page' : undefined}><Cloud class="size-4" />Data sync</button>
+      <button class:active-nav={view === 'settings'} class="side-nav" on:click={() => onNavigate('settings')} aria-current={view === 'settings' ? 'page' : undefined}><Cloud class="size-4" />Data &amp; AI</button>
     </nav>
     <div class="mt-auto">
       {#if activeWorkout && view !== 'workout'}

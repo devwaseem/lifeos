@@ -13,6 +13,7 @@ const completedWorkout: WorkoutSession = {
   updatedAt: '2026-10-20T11:15:30.000Z',
   notes: '',
   sessionRpe: 8,
+  checkIn: null,
   exercises: [],
 }
 

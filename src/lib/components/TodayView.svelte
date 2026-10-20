@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Activity, ArrowRight, CalendarDays, Dumbbell, Gauge, History, Layers3, Moon, Repeat2, ShieldAlert } from '@lucide/svelte'
-  import { getCurrentCycleSlot, getCycleRoutine } from '$lib/training-cycle'
+  import { getCurrentCycleSlot, getCycleRoutine, getTrainingCycleState } from '$lib/training-cycle'
   import { getRecommendedRoutine, getTrainingReadiness, type MuscleRecovery } from '$lib/training-readiness'
   import { getFatigueSignal, getMuscleDose, getSystemicLoad } from '$lib/training-science'
   import type { RoutineTemplate, TrainingCycle, WorkoutSession } from '$lib/types'
@@ -17,7 +17,6 @@
   export let onSelectRoutine: (routineId: string) => void
   export let onStartRoutine: (routine: RoutineTemplate) => void
   export let onStartCycleRoutine: (routine: RoutineTemplate, slotId: string) => void
-  export let onCompleteRest: (slotId: string) => void
   export let onStart: () => void
   export let onResume: () => void
   export let onManageRoutines: () => void
@@ -36,13 +35,15 @@
   $: selectedRoutine = routines.find((routine) => routine.id === selectedRoutineId)
   $: cycleSlot = getCurrentCycleSlot(trainingCycle)
   $: cycleRoutine = getCycleRoutine(trainingCycle, routines)
+  $: cycleState = getTrainingCycleState(trainingCycle, workouts, now)
   $: cycleActive = Boolean(trainingCycle && !trainingCycle.deletedAt && trainingCycle.slots.length > 0)
-  $: restDay = !activeWorkout && cycleSlot?.type === 'rest'
-  $: cycleNeedsAttention = cycleSlot?.type === 'routine' && !cycleRoutine
+  $: restDay = !activeWorkout && cycleState.restDue
+  $: cycleNeedsAttention = Boolean(cycleSlot && !cycleRoutine)
   $: plannedRoutine = cycleActive ? cycleRoutine : selectedRoutine
   $: planMovements = activeWorkout?.exercises ?? (restDay ? [] : plannedRoutine?.exercises ?? [])
   $: planName = activeWorkout?.title ?? (restDay ? 'Recovery day' : plannedRoutine?.name ?? (cycleNeedsAttention ? 'Cycle needs attention' : 'Choose today’s workout'))
   $: insights = getTrainingReadiness(planMovements, workouts, now)
+  $: fatigueOverrideRequired = !cycleActive && insights.systemicFatigueWarning
   $: restrictedMuscleCount = insights.recovery.filter((recovery) => recovery.readiness < 80).length
   $: recommendation = getRecommendedRoutine(routines, insights.recovery)
   $: completedWorkouts = workouts
@@ -70,16 +71,16 @@
   $: primaryEyebrow = activeWorkout
     ? 'Session active'
     : restDay
-      ? 'Recovery slot'
+      ? `${cycleState.consecutiveTrainingDays} of ${cycleState.trainingDaysBeforeRest} training days`
       : cycleNeedsAttention
         ? 'Routine unavailable'
-        : insights.systemicFatigueWarning
+        : fatigueOverrideRequired
           ? 'Override required'
           : cyclePosition || (plannedRoutine ? 'Ready when you are' : 'No plan selected')
   $: primaryLabel = activeWorkout
     ? `Resume ${activeWorkout.title}`
     : restDay
-      ? 'Complete recovery day'
+      ? 'Rest today'
       : cycleNeedsAttention
         ? 'Repair training cycle'
         : plannedRoutine
@@ -112,10 +113,6 @@
       onResume()
       return
     }
-    if (restDay && cycleSlot) {
-      onCompleteRest(cycleSlot.id)
-      return
-    }
     if (cycleNeedsAttention) {
       onManageRoutines()
       return
@@ -124,21 +121,25 @@
       onStart()
       return
     }
-    if (insights.systemicFatigueWarning) {
+    if (fatigueOverrideRequired) {
       forceOverrideOpen = true
       return
     }
-    if (cycleSlot?.type === 'routine' && cycleRoutine) {
+    if (cycleSlot && cycleRoutine) {
       onStartCycleRoutine(cycleRoutine, cycleSlot.id)
       return
     }
     onStartRoutine(plannedRoutine)
   }
 
+  function trainOnRestDay() {
+    if (cycleSlot && cycleRoutine) onStartCycleRoutine(cycleRoutine, cycleSlot.id)
+  }
+
   function forceOverride() {
     if (!plannedRoutine) return
     forceOverrideOpen = false
-    if (cycleSlot?.type === 'routine' && cycleRoutine) onStartCycleRoutine(cycleRoutine, cycleSlot.id)
+    if (cycleSlot && cycleRoutine) onStartCycleRoutine(cycleRoutine, cycleSlot.id)
     else onStartRoutine(plannedRoutine)
   }
 
@@ -191,7 +192,7 @@
         {#if activeWorkout}
           {' '}Your{' '}<Dumbbell class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">{activeWorkout.title}</span>{' '}workout is underway with{' '}<span class="font-semibold text-ink">{activeSetLabel}</span>{' '}logged. Recent training load is{' '}<span class="font-medium text-ink">{recentLoadNarrative}.</span>
         {:else if restDay}
-          {' '}Today is your{' '}<Moon class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">recovery slot.</span>{' '}You’ve logged{' '}<CalendarDays class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-semibold text-ink">{recentSessionLabel}</span>{' '}in the last 7 days. Recent training load is{' '}<span class="font-medium text-ink">{recentLoadNarrative}.</span>
+          {' '}You’ve completed{' '}<CalendarDays class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-semibold text-ink">{cycleState.consecutiveTrainingDays} consecutive training days.</span>{' '}Rest today; the queue keeps{' '}<Dumbbell class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">{plannedRoutine?.name ?? 'your next routine'}</span>{' '}next.
         {:else if cycleNeedsAttention}
           {' '}Your{' '}<Repeat2 class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">training cycle needs attention.</span>{' '}Replace the unavailable routine to keep the completion-driven cycle moving.
         {:else if plannedRoutine}
@@ -218,10 +219,10 @@
 
       {#if restDay}
         <div class="mt-8 flex items-end justify-between gap-5 border-b border-rule pb-6">
-          <div><span class="font-dot block text-6xl leading-none">REST</span><span class="mt-2 block text-xs uppercase text-muted">Completion-driven recovery</span></div>
+          <div><span class="font-dot block text-6xl leading-none">REST</span><span class="mt-2 block text-xs uppercase text-muted">Inferred from your training streak</span></div>
           <span class="grid size-14 shrink-0 place-items-center rounded-full bg-canvas"><Moon class="size-6" /></span>
         </div>
-        <p class="mt-5 text-sm leading-6 text-muted">The rotation waits here until you complete or deliberately skip this recovery day.</p>
+        <p class="mt-5 text-sm leading-6 text-muted">You trained on the previous {cycleState.trainingDaysBeforeRest} consecutive days. Resting today resets the count automatically without moving {plannedRoutine?.name ?? 'the next routine'} out of the queue.</p>
       {:else if planMovements.length > 0}
         <div class="mt-8 flex items-end justify-between gap-4 border-b border-rule pb-5">
           <div><span class="font-dot block text-6xl leading-none tabular-nums">{insights.targetReadiness}%</span><span class="mt-2 block text-xs uppercase text-muted">Estimated target readiness</span></div>
@@ -235,7 +236,7 @@
         <p class="mt-8 text-sm leading-6 text-muted">Select a routine to see the readiness of its target muscles.</p>
       {/if}
 
-      {#if !restDay && insights.systemicFatigueWarning}
+      {#if !restDay && fatigueOverrideRequired}
         <div class="mt-5 flex items-start gap-3 rounded-xl bg-danger-soft px-4 py-3 text-danger" role="alert">
           <ShieldAlert class="mt-0.5 size-4 shrink-0" />
           <span class="min-w-0"><span class="block text-xs font-medium uppercase">Consecutive load warning</span><span class="mt-1 block text-xs opacity-80">{insights.consecutiveLoadDays} consecutive training days. This is a scheduling heuristic, not a recovery or injury prediction.</span></span>
@@ -243,11 +244,15 @@
       {/if}
 
       <div class="mt-auto pt-6">
-        <button class:fatigue-action={!activeWorkout && !restDay && insights.systemicFatigueWarning} class="flex min-h-16 w-full items-center justify-between gap-4 rounded-xl bg-ink px-5 text-left text-paper" on:click={primaryAction}>
-          <span><span class="block text-[0.625rem] font-medium uppercase opacity-70">{primaryEyebrow}</span><span class="mt-1 block text-lg font-medium">{primaryLabel}</span></span><ArrowRight class="size-5 shrink-0" />
-        </button>
         {#if restDay}
-          <div class="mt-2 grid grid-cols-2 gap-2"><button class="min-h-11 rounded-xl bg-canvas px-3 text-sm font-medium" on:click={onStart}>Train anyway</button><button class="min-h-11 rounded-xl bg-canvas px-3 text-sm font-medium" on:click={onManageRoutines}>Edit cycle</button></div>
+          <div class="flex min-h-16 w-full items-center justify-between gap-4 rounded-xl bg-ink px-5 text-left text-paper" role="status">
+            <span><span class="block text-[0.625rem] font-medium uppercase opacity-70">{primaryEyebrow}</span><span class="mt-1 block text-lg font-medium">{primaryLabel}</span></span><Moon class="size-5 shrink-0" />
+          </div>
+          <div class="mt-2 grid grid-cols-2 gap-2"><button class="min-h-11 rounded-xl bg-canvas px-3 text-sm font-medium disabled:opacity-40" disabled={!cycleRoutine} on:click={trainOnRestDay}>Train {cycleRoutine?.name ?? 'anyway'}</button><button class="min-h-11 rounded-xl bg-canvas px-3 text-sm font-medium" on:click={onManageRoutines}>Edit cycle</button></div>
+        {:else}
+          <button class:fatigue-action={!activeWorkout && fatigueOverrideRequired} class="flex min-h-16 w-full items-center justify-between gap-4 rounded-xl bg-ink px-5 text-left text-paper" on:click={primaryAction}>
+            <span><span class="block text-[0.625rem] font-medium uppercase opacity-70">{primaryEyebrow}</span><span class="mt-1 block text-lg font-medium">{primaryLabel}</span></span><ArrowRight class="size-5 shrink-0" />
+          </button>
         {/if}
         <div class:open={forceOverrideOpen} class="override-reveal" aria-hidden={!forceOverrideOpen} inert={!forceOverrideOpen}>
           <div><div class="pt-3"><div class="rounded-xl bg-danger-soft p-4 text-danger"><p class="text-sm font-medium">Three or more consecutive training days detected.</p><p class="mt-1 text-xs leading-5">Continue only if this additional load is intentional and recovery is adequate.</p><div class="mt-4 grid grid-cols-2 gap-2"><button class="min-h-12 rounded-xl bg-paper px-3 text-sm font-medium" on:click={() => { forceOverrideOpen = false }}>Not today</button><button class="min-h-12 rounded-xl bg-danger px-3 text-sm font-medium text-danger-ink" on:click={forceOverride}>Force override</button></div></div></div></div>

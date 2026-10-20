@@ -32,6 +32,19 @@ interface WorkoutRow extends VersionRow {
   session_rpe: number | null
 }
 
+interface WorkoutCheckInRow {
+  workout_id: string
+  recorded_at: string
+  sleep_quality: number
+  energy: number
+  soreness: number
+  stress: number
+  motivation: number
+  pain_present: number
+  illness_present: number
+  notes: string
+}
+
 interface WorkoutExerciseRow {
   id: string
   workout_id: string
@@ -45,7 +58,6 @@ interface WorkoutExerciseRow {
   progression_min_reps: number
   progression_max_reps: number
   progression_weight_increment: number | null
-  progression_max_rpe: number
 }
 
 interface SecondaryMuscleRow {
@@ -89,7 +101,6 @@ interface RoutineExerciseRow {
   progression_min_reps: number
   progression_max_reps: number
   progression_weight_increment: number | null
-  progression_max_rpe: number
 }
 
 interface TrainingCycleRow extends VersionRow {
@@ -97,13 +108,13 @@ interface TrainingCycleRow extends VersionRow {
   created_at: string
   deleted_at: string | null
   current_index: number
+  training_days_before_rest: number
 }
 
 interface TrainingCycleSlotRow {
   training_cycle_id: string
   id: string
-  type: TrainingCycleSlot['type']
-  routine_id: string | null
+  routine_id: string
 }
 
 export interface TrainingSyncInput {
@@ -124,13 +135,11 @@ function progression(row: {
   progression_min_reps: number
   progression_max_reps: number
   progression_weight_increment: number | null
-  progression_max_rpe: number
 }): ProgressionRule {
   return {
     minReps: row.progression_min_reps,
     maxReps: row.progression_max_reps,
     weightIncrement: row.progression_weight_increment,
-    maxRpe: row.progression_max_rpe,
   }
 }
 
@@ -224,13 +233,32 @@ async function storeWorkout(database: D1Database, workout: WorkoutSession) {
   const condition = 'EXISTS (SELECT 1 FROM workouts WHERE id = ? AND sync_token = ?)'
   const conditionValues = [workout.id, token]
   statements.push(database.prepare(`
+    DELETE FROM workout_checkins
+    WHERE workout_id = ? AND ${condition}
+  `).bind(workout.id, ...conditionValues))
+  statements.push(...conditionalInsertStatements(database, 'workout_checkins', [
+    'workout_id', 'recorded_at', 'sleep_quality', 'energy', 'soreness', 'stress',
+    'motivation', 'pain_present', 'illness_present', 'notes',
+  ], workout.checkIn ? [[
+    workout.id,
+    workout.checkIn.recordedAt,
+    workout.checkIn.sleepQuality,
+    workout.checkIn.energy,
+    workout.checkIn.soreness,
+    workout.checkIn.stress,
+    workout.checkIn.motivation,
+    workout.checkIn.painPresent ? 1 : 0,
+    workout.checkIn.illnessPresent ? 1 : 0,
+    workout.checkIn.notes,
+  ]] : [], condition, conditionValues))
+  statements.push(database.prepare(`
     DELETE FROM workout_exercises
     WHERE workout_id = ? AND ${condition}
   `).bind(workout.id, ...conditionValues))
   statements.push(...conditionalInsertStatements(database, 'workout_exercises', [
     'id', 'workout_id', 'position', 'exercise_id', 'name', 'primary_muscle', 'equipment', 'notes',
     'rest_seconds', 'rest_until', 'progression_min_reps', 'progression_max_reps',
-    'progression_weight_increment', 'progression_max_rpe',
+    'progression_weight_increment',
   ], workout.exercises.map((exercise, position) => [
     exercise.id,
     workout.id,
@@ -245,7 +273,6 @@ async function storeWorkout(database: D1Database, workout: WorkoutSession) {
     exercise.progression.minReps,
     exercise.progression.maxReps,
     exercise.progression.weightIncrement,
-    exercise.progression.maxRpe,
   ]), condition, conditionValues))
   statements.push(...conditionalInsertStatements(database, 'workout_exercise_secondary_muscles', [
     'workout_exercise_id', 'position', 'muscle', 'fraction',
@@ -298,7 +325,7 @@ async function storeRoutine(database: D1Database, routine: RoutineTemplate) {
   statements.push(...conditionalInsertStatements(database, 'routine_exercises', [
     'id', 'routine_id', 'position', 'exercise_id', 'name', 'primary_muscle', 'equipment', 'notes',
     'rest_seconds', 'set_count', 'has_warmup_set', 'progression_min_reps', 'progression_max_reps',
-    'progression_weight_increment', 'progression_max_rpe',
+    'progression_weight_increment',
   ], routine.exercises.map((exercise, position) => [
     exercise.id,
     routine.id,
@@ -314,7 +341,6 @@ async function storeRoutine(database: D1Database, routine: RoutineTemplate) {
     exercise.progression.minReps,
     exercise.progression.maxReps,
     exercise.progression.weightIncrement,
-    exercise.progression.maxRpe,
   ]), condition, conditionValues))
   statements.push(...conditionalInsertStatements(database, 'routine_exercise_secondary_muscles', [
     'routine_exercise_id', 'position', 'muscle', 'fraction',
@@ -333,24 +359,37 @@ async function storeTrainingCycle(database: D1Database, cycle: TrainingCycle) {
   const condition = 'EXISTS (SELECT 1 FROM training_cycles WHERE id = ? AND sync_token = ?)'
   const conditionValues = [cycle.id, token]
   const statements: D1PreparedStatement[] = [database.prepare(`
-    INSERT INTO training_cycles (id, name, created_at, updated_at, deleted_at, current_index, sync_token)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO training_cycles (
+      id, name, created_at, updated_at, deleted_at, current_index,
+      training_days_before_rest, sync_token
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       created_at = excluded.created_at,
       updated_at = excluded.updated_at,
       deleted_at = excluded.deleted_at,
       current_index = excluded.current_index,
+      training_days_before_rest = excluded.training_days_before_rest,
       sync_token = excluded.sync_token
     WHERE excluded.updated_at > training_cycles.updated_at
-  `).bind(cycle.id, cycle.name, cycle.createdAt, cycle.updatedAt, cycle.deletedAt, cycle.currentIndex, token)]
+  `).bind(
+    cycle.id,
+    cycle.name,
+    cycle.createdAt,
+    cycle.updatedAt,
+    cycle.deletedAt,
+    cycle.currentIndex,
+    cycle.trainingDaysBeforeRest,
+    token,
+  )]
   statements.push(database.prepare(`
     DELETE FROM training_cycle_slots
     WHERE training_cycle_id = ? AND ${condition}
   `).bind(cycle.id, ...conditionValues))
   statements.push(...conditionalInsertStatements(database, 'training_cycle_slots', [
-    'id', 'training_cycle_id', 'position', 'type', 'routine_id',
-  ], cycle.slots.map((slot, position) => [slot.id, cycle.id, position, slot.type, slot.routineId]), condition, conditionValues))
+    'id', 'training_cycle_id', 'position', 'routine_id',
+  ], cycle.slots.map((slot, position) => [slot.id, cycle.id, position, slot.routineId]), condition, conditionValues))
   statements.push(changeStatement(database, 'training_cycle', cycle.id, 'training_cycles', token))
   await database.batch(statements)
 }
@@ -407,8 +446,7 @@ async function loadWorkouts(database: D1Database, cursor: number | null, upperRe
   const workoutIds = workouts.map((workout) => workout.id)
   const exercises = await rowsForParents<WorkoutExerciseRow>(database, workoutIds, (placeholders) => `
     SELECT id, workout_id, exercise_id, name, primary_muscle, equipment, notes, rest_seconds,
-      rest_until, progression_min_reps, progression_max_reps, progression_weight_increment,
-      progression_max_rpe
+      rest_until, progression_min_reps, progression_max_reps, progression_weight_increment
     FROM workout_exercises
     WHERE workout_id IN (${placeholders})
     ORDER BY workout_id, position
@@ -430,11 +468,20 @@ async function loadWorkouts(database: D1Database, cursor: number | null, upperRe
     WHERE exercise.workout_id IN (${placeholders})
     ORDER BY exercise.workout_id, exercise.position, workout_set.position
   `)
+  const checkIns = await rowsForParents<WorkoutCheckInRow>(database, workoutIds, (placeholders) => `
+    SELECT workout_id, recorded_at, sleep_quality, energy, soreness, stress,
+      motivation, pain_present, illness_present, notes
+    FROM workout_checkins
+    WHERE workout_id IN (${placeholders})
+  `)
   const musclesByExercise = groupBy(muscles, (row) => row.parent_id)
   const setsByExercise = groupBy(sets, (row) => row.workout_exercise_id)
   const exercisesByWorkout = groupBy(exercises, (row) => row.workout_id)
+  const checkInsByWorkout = new Map(checkIns.map((checkIn) => [checkIn.workout_id, checkIn]))
 
-  return workouts.map((workout): WorkoutSession => ({
+  return workouts.map((workout): WorkoutSession => {
+    const checkIn = checkInsByWorkout.get(workout.id)
+    return ({
     id: workout.id,
     title: workout.title,
     routineId: workout.routine_id,
@@ -445,6 +492,19 @@ async function loadWorkouts(database: D1Database, cursor: number | null, upperRe
     updatedAt: workout.updated_at,
     notes: workout.notes,
     sessionRpe: workout.session_rpe,
+    checkIn: checkIn
+      ? {
+        recordedAt: checkIn.recorded_at,
+        sleepQuality: checkIn.sleep_quality,
+        energy: checkIn.energy,
+        soreness: checkIn.soreness,
+        stress: checkIn.stress,
+        motivation: checkIn.motivation,
+        painPresent: checkIn.pain_present === 1,
+        illnessPresent: checkIn.illness_present === 1,
+        notes: checkIn.notes,
+      }
+      : null,
     exercises: (exercisesByWorkout.get(workout.id) ?? []).map((exercise): WorkoutExercise => ({
       id: exercise.id,
       exerciseId: exercise.exercise_id,
@@ -469,7 +529,8 @@ async function loadWorkouts(database: D1Database, cursor: number | null, upperRe
         notes: workoutSet.notes,
       })),
     })),
-  }))
+    })
+  })
 }
 
 async function loadRoutines(database: D1Database, cursor: number | null, upperRevision: number) {
@@ -479,8 +540,7 @@ async function loadRoutines(database: D1Database, cursor: number | null, upperRe
   const routineIds = routines.map((routine) => routine.id)
   const exercises = await rowsForParents<RoutineExerciseRow>(database, routineIds, (placeholders) => `
     SELECT id, routine_id, exercise_id, name, primary_muscle, equipment, notes, rest_seconds,
-      set_count, has_warmup_set, progression_min_reps, progression_max_reps, progression_weight_increment,
-      progression_max_rpe
+      set_count, has_warmup_set, progression_min_reps, progression_max_reps, progression_weight_increment
     FROM routine_exercises
     WHERE routine_id IN (${placeholders})
     ORDER BY routine_id, position
@@ -519,10 +579,10 @@ async function loadRoutines(database: D1Database, cursor: number | null, upperRe
 
 async function loadTrainingCycle(database: D1Database, cursor: number | null, upperRevision: number) {
   const cycles = await changedRows<TrainingCycleRow>(database, 'training_cycles', 'training_cycle', `
-    id, name, created_at, updated_at, deleted_at, current_index
+    id, name, created_at, updated_at, deleted_at, current_index, training_days_before_rest
   `, cursor, upperRevision, 1)
   const slots = await rowsForParents<TrainingCycleSlotRow>(database, cycles.map((cycle) => cycle.id), (placeholders) => `
-    SELECT training_cycle_id, id, type, routine_id
+    SELECT training_cycle_id, id, routine_id
     FROM training_cycle_slots
     WHERE training_cycle_id IN (${placeholders})
     ORDER BY training_cycle_id, position
@@ -537,10 +597,22 @@ async function loadTrainingCycle(database: D1Database, cursor: number | null, up
     updatedAt: cycle.updated_at,
     deletedAt: cycle.deleted_at,
     currentIndex: cycle.current_index,
-    slots: (slotsByCycle.get(cycle.id) ?? []).map((slot): TrainingCycleSlot => slot.type === 'rest'
-      ? { id: slot.id, type: 'rest', routineId: null }
-      : { id: slot.id, type: 'routine', routineId: slot.routine_id! }),
+    trainingDaysBeforeRest: cycle.training_days_before_rest,
+    slots: (slotsByCycle.get(cycle.id) ?? []).map((slot): TrainingCycleSlot => ({
+      id: slot.id,
+      routineId: slot.routine_id,
+    })),
   }
+}
+
+export async function readTrainingSnapshot(database: D1Database): Promise<TrainingSyncSnapshot> {
+  const revision = await database.prepare('SELECT COALESCE(MAX(revision), 0) AS revision FROM sync_changes').first<number>('revision') ?? 0
+  const [workouts, routines, trainingCycle] = await Promise.all([
+    loadWorkouts(database, null, revision),
+    loadRoutines(database, null, revision),
+    loadTrainingCycle(database, null, revision),
+  ])
+  return { workouts, routines, trainingCycle, cursor: revision }
 }
 
 export async function syncTrainingData(database: D1Database, input: TrainingSyncInput): Promise<TrainingSyncSnapshot> {

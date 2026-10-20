@@ -1,5 +1,6 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose'
-import type { RoutineTemplate, TrainingCycle, WorkoutSession } from '../types'
+import type { RoutineTemplate, TrainingCycle, TrainingProfile, WorkoutCheckIn, WorkoutSession } from '../types'
+import { recordDeviceSync, syncTrainingContext } from './training-context-store'
 import { syncTrainingData } from './training-sync-store'
 
 export interface WorkoutSyncEnvironment {
@@ -15,6 +16,7 @@ interface SyncBody {
   routines?: unknown
   trainingCycle?: unknown
   cursor?: unknown
+  profile?: unknown
 }
 
 
@@ -22,14 +24,16 @@ const MAX_SYNC_PAYLOAD_BYTES = 5 * 1024 * 1024
 
 const accessKeySets = new Map<string, JWTVerifyGetKey>()
 
-async function hasValidSyncAuthentication(request: Request, environment: WorkoutSyncEnvironment) {
+async function authenticateSyncRequest(request: Request, environment: WorkoutSyncEnvironment) {
   if (environment.LOCAL_SYNC_TOKEN) {
     return request.headers.get('Authorization') === `Bearer ${environment.LOCAL_SYNC_TOKEN}`
+      ? 'local-development'
+      : null
   }
 
-  if (!environment.CF_ACCESS_TEAM_DOMAIN || !environment.CF_ACCESS_AUD) return false
+  if (!environment.CF_ACCESS_TEAM_DOMAIN || !environment.CF_ACCESS_AUD) return null
   const assertion = request.headers.get('Cf-Access-Jwt-Assertion')
-  if (!assertion) return false
+  if (!assertion) return null
 
   const issuer = `https://${environment.CF_ACCESS_TEAM_DOMAIN}.cloudflareaccess.com`
   let keySet = accessKeySets.get(issuer)
@@ -39,18 +43,33 @@ async function hasValidSyncAuthentication(request: Request, environment: Workout
   }
 
   try {
-    await jwtVerify(assertion, keySet, {
+    const { payload } = await jwtVerify(assertion, keySet, {
       issuer,
       audience: environment.CF_ACCESS_AUD,
     })
-    return true
+    return typeof payload.sub === 'string'
+      ? payload.sub
+      : typeof payload.email === 'string'
+        ? payload.email
+        : null
   } catch {
-    return false
+    return null
   }
 }
 
 function json(data: unknown, status = 200) {
   return Response.json(data, { status })
+}
+
+function isWorkoutCheckIn(value: unknown): value is WorkoutCheckIn {
+  if (!value || typeof value !== 'object') return false
+  const checkIn = value as Partial<WorkoutCheckIn>
+  const ratings = [checkIn.sleepQuality, checkIn.energy, checkIn.soreness, checkIn.stress, checkIn.motivation]
+  return typeof checkIn.recordedAt === 'string'
+    && ratings.every((rating) => Number.isInteger(rating) && (rating ?? 0) >= 1 && (rating ?? 0) <= 5)
+    && typeof checkIn.painPresent === 'boolean'
+    && typeof checkIn.illnessPresent === 'boolean'
+    && typeof checkIn.notes === 'string' && checkIn.notes.length <= 2_000
 }
 
 function isWorkout(value: unknown): value is WorkoutSession {
@@ -61,7 +80,7 @@ function isWorkout(value: unknown): value is WorkoutSession {
     && (workout.status === 'active' || workout.status === 'completed' || workout.status === 'cancelled')
     && typeof workout.startedAt === 'string'
     && typeof workout.updatedAt === 'string'
-    && typeof workout.notes === 'string'
+    && (workout.checkIn === undefined || workout.checkIn === null || isWorkoutCheckIn(workout.checkIn))
     && Array.isArray(workout.exercises)
 }
 
@@ -85,15 +104,32 @@ function isTrainingCycle(value: unknown): value is TrainingCycle {
     && typeof cycle.updatedAt === 'string'
     && (cycle.deletedAt === null || typeof cycle.deletedAt === 'string')
     && typeof cycle.currentIndex === 'number'
+    && Number.isInteger(cycle.trainingDaysBeforeRest)
+    && (cycle.trainingDaysBeforeRest ?? 0) >= 1
+    && (cycle.trainingDaysBeforeRest ?? 0) <= 7
     && Array.isArray(cycle.slots)
     && cycle.slots.length <= 100
     && cycle.slots.every((slot) => slot
       && typeof slot === 'object'
       && typeof slot.id === 'string'
-      && (slot.type === 'rest'
-        ? slot.routineId === null
-        : slot.type === 'routine' && typeof slot.routineId === 'string'))
+      && typeof slot.routineId === 'string'
+      && slot.routineId.length > 0)
 }
+
+function isTrainingProfile(value: unknown): value is TrainingProfile {
+  if (!value || typeof value !== 'object') return false
+  const profile = value as Partial<TrainingProfile>
+  return profile.id === 'primary-training-profile'
+    && (profile.primaryGoal === 'strength' || profile.primaryGoal === 'hypertrophy' || profile.primaryGoal === 'general-fitness' || profile.primaryGoal === 'conditioning')
+    && (profile.experienceLevel === 'beginner' || profile.experienceLevel === 'intermediate' || profile.experienceLevel === 'advanced')
+    && Number.isInteger(profile.daysPerWeek) && (profile.daysPerWeek ?? 0) >= 1 && (profile.daysPerWeek ?? 0) <= 7
+    && Number.isInteger(profile.sessionMinutes) && (profile.sessionMinutes ?? 0) >= 10 && (profile.sessionMinutes ?? 0) <= 300
+    && Array.isArray(profile.availableEquipment) && profile.availableEquipment.length <= 100 && profile.availableEquipment.every((item) => typeof item === 'string')
+    && Array.isArray(profile.excludedExercises) && profile.excludedExercises.length <= 200 && profile.excludedExercises.every((item) => typeof item === 'string' && item.length <= 200)
+    && typeof profile.movementConstraints === 'string' && profile.movementConstraints.length <= 2_000
+    && typeof profile.updatedAt === 'string'
+}
+
 
 export async function handleWorkoutSyncRequest(
   request: Request,
@@ -102,9 +138,8 @@ export async function handleWorkoutSyncRequest(
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
   if (!environment) return json({ error: 'Cloudflare bindings unavailable' }, 503)
 
-  if (!await hasValidSyncAuthentication(request, environment)) {
-    return json({ error: 'Unauthorized' }, 401)
-  }
+  const authenticatedSubject = await authenticateSyncRequest(request, environment)
+  if (!authenticatedSubject) return json({ error: 'Unauthorized' }, 401)
 
   if (Number(request.headers.get('Content-Length') ?? 0) > MAX_SYNC_PAYLOAD_BYTES) {
     return json({ error: 'Payload too large' }, 413)
@@ -138,6 +173,12 @@ export async function handleWorkoutSyncRequest(
       ? body.trainingCycle
       : undefined
   if (trainingCycle === undefined) return json({ error: 'Invalid training cycle record' }, 400)
+  const profile = body.profile === undefined || body.profile === null
+    ? null
+    : isTrainingProfile(body.profile)
+      ? body.profile
+      : undefined
+  if (profile === undefined) return json({ error: 'Invalid training profile' }, 400)
 
   const snapshot = await syncTrainingData(environment.DB, {
     workouts,
@@ -145,5 +186,8 @@ export async function handleWorkoutSyncRequest(
     trainingCycle,
     cursor: typeof body.cursor === 'number' ? body.cursor : null,
   })
-  return json({ ...snapshot, syncedAt: new Date().toISOString() })
+  const context = await syncTrainingContext(environment.DB, profile)
+  const syncedAt = new Date().toISOString()
+  await recordDeviceSync(environment.DB, body.deviceId, authenticatedSubject, snapshot.cursor, syncedAt)
+  return json({ ...snapshot, ...context, syncedAt })
 }

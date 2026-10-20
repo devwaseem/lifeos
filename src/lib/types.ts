@@ -22,7 +22,6 @@ export interface ProgressionRule {
   minReps: number
   maxReps: number
   weightIncrement: number | null
-  maxRpe: number
 }
 
 export interface WorkoutExercise {
@@ -62,9 +61,10 @@ export interface RoutineTemplate {
   exercises: RoutineExercise[]
 }
 
-export type TrainingCycleSlot =
-  | { id: string; type: 'routine'; routineId: string }
-  | { id: string; type: 'rest'; routineId: null }
+export interface TrainingCycleSlot {
+  id: string
+  routineId: string
+}
 
 export interface TrainingCycle {
   id: string
@@ -73,7 +73,20 @@ export interface TrainingCycle {
   updatedAt: string
   deletedAt: string | null
   currentIndex: number
+  trainingDaysBeforeRest: number
   slots: TrainingCycleSlot[]
+}
+
+export interface WorkoutCheckIn {
+  recordedAt: string
+  sleepQuality: number
+  energy: number
+  soreness: number
+  stress: number
+  motivation: number
+  painPresent: boolean
+  illnessPresent: boolean
+  notes: string
 }
 
 export interface WorkoutSession {
@@ -87,6 +100,7 @@ export interface WorkoutSession {
   updatedAt: string
   notes: string
   sessionRpe: number | null
+  checkIn: WorkoutCheckIn | null
   exercises: WorkoutExercise[]
 }
 
@@ -121,5 +135,21 @@ export interface SyncSettings {
   lastSyncedAt: string | null
   syncCursor: number | null
 }
+
+export type TrainingGoal = 'strength' | 'hypertrophy' | 'general-fitness' | 'conditioning'
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced'
+
+export interface TrainingProfile {
+  id: 'primary-training-profile'
+  primaryGoal: TrainingGoal
+  experienceLevel: ExperienceLevel
+  daysPerWeek: number
+  sessionMinutes: number
+  availableEquipment: string[]
+  excludedExercises: string[]
+  movementConstraints: string
+  updatedAt: string
+}
+
 
 export type AppView = 'today' | 'history' | 'workout-history' | 'more' | 'routines' | 'exercises' | 'settings' | 'workout' | 'exercise'

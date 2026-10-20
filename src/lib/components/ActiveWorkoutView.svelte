@@ -5,7 +5,7 @@
   import { fade, fly } from 'svelte/transition'
   import { getWorkoutPersonalRecords } from '$lib/personal-records'
   import { getExerciseTrackingMode } from '$lib/exercise-tracking'
-  import { buildSetProgressionTargets, defaultProgressionRule } from '$lib/progression'
+  import { buildExerciseProgressionResults, buildSetProgressionTargets, defaultProgressionRule } from '$lib/progression'
   import { routineMatchesWorkout } from '$lib/routines'
   import { getWorkoutStrengthHighlights } from '$lib/training-science'
   import type { ExerciseDefinition, RoutineTemplate, WorkoutExercise, WorkoutFinishDecision, WorkoutSession, WorkoutSet } from '$lib/types'
@@ -15,6 +15,7 @@
   import ConfirmDialog from './ConfirmDialog.svelte'
   import FinishWorkoutDialog from './FinishWorkoutDialog.svelte'
   import ExercisePicker from './ExercisePicker.svelte'
+  import ExerciseProgressionSignal from './ExerciseProgressionSignal.svelte'
   import MaxEffortMoment from './MaxEffortMoment.svelte'
   import WorkoutSetRow from './WorkoutSetRow.svelte'
 
@@ -160,12 +161,17 @@
     .sort((a, b) => a.remaining - b.remaining)[0]
 
   $: progressionTargets = buildSetProgressionTargets(workout, workouts)
+  $: progressionResults = buildExerciseProgressionResults(workout, workouts)
   $: personalRecords = getWorkoutPersonalRecords(workout, workouts)
   $: finishHighlights = personalRecords.map((record) => ({
     id: record.id,
     title: record.exerciseName,
     description: `${record.label} · ${record.formattedValue}`,
   }))
+  $: finishProgressionResults = workout.exercises.flatMap((exercise) => {
+    const result = progressionResults.get(exercise.id)
+    return result && result.status !== 'pending' ? [{ exerciseName: exercise.name, result }] : []
+  })
   $: strengthHighlights = getWorkoutStrengthHighlights(workout, workouts)
   $: sourceRoutine = workout.routineId
     ? routines.find((routine) => routine.id === workout.routineId && !routine.deletedAt)
@@ -233,6 +239,7 @@
             {#each workout.exercises as exercise, exerciseIndex (exercise.id)}
               {@const exerciseRecords = personalRecords.filter((record) => record.workoutExerciseId === exercise.id)}
               {@const trackingMode = getExerciseTrackingMode(exercise)}
+              {@const progressionResult = progressionResults.get(exercise.id)}
               <section class="border-y border-rule bg-paper px-3 py-4 sm:rounded-2xl sm:border-0 sm:p-5" animate:flip={{ duration: 180 }} in:fly={{ y: 12, duration: 180 }} out:fade={{ duration: 120 }}>
                 <div class="flex items-start justify-between gap-3 pb-4">
                   <div class="min-w-0">
@@ -258,6 +265,7 @@
                   <label class="rounded-xl bg-canvas px-3 py-2"><span class="flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase text-muted"><Bell class="size-3.5" /> Rest timer</span><select class="mt-1 w-full bg-transparent text-sm font-medium outline-none" value={exercise.restSeconds} on:change={(event) => updateExercise(exercise.id, (item) => ({ ...item, restSeconds: Number(event.currentTarget.value) }))}><option value={0}>Off</option><option value={30}>30 seconds</option><option value={60}>1 minute</option><option value={90}>1:30 minutes</option><option value={120}>2 minutes</option><option value={180}>3 minutes</option><option value={300}>5 minutes</option></select></label>
                   <label class="rounded-xl bg-canvas px-3 py-2"><span class="text-[0.6875rem] font-medium uppercase text-muted">Exercise note</span><textarea class="mt-1 min-h-8 w-full resize-y bg-transparent text-sm leading-5 outline-none placeholder:text-muted" value={exercise.notes} on:input={(event) => updateExercise(exercise.id, (item) => ({ ...item, notes: event.currentTarget.value }))} placeholder="Cues, setup, or pain notes"></textarea></label>
                 </div>
+                {#if progressionResult}<div class="mb-3"><ExerciseProgressionSignal result={progressionResult} /></div>{/if}
 
 
                 <div>
@@ -314,7 +322,7 @@
   {/key}
 {/if}
 
-<FinishWorkoutDialog bind:this={finishDialog} mode={finishMode} routineName={sourceRoutine?.name ?? ''} suggestedRoutineName={`${workout.title} routine`} description={finishDescription} initialNotes={workout.notes} highlights={finishHighlights} {strengthHighlights} onConfirm={onFinish} />
+<FinishWorkoutDialog bind:this={finishDialog} mode={finishMode} routineName={sourceRoutine?.name ?? ''} suggestedRoutineName={`${workout.title} routine`} description={finishDescription} initialNotes={workout.notes} highlights={finishHighlights} {strengthHighlights} progressionResults={finishProgressionResults} onConfirm={onFinish} />
 <ConfirmDialog bind:this={cancelDialog} eyebrow="Discard session" title="Cancel this workout?" description="The active session and its set data will be discarded. This cannot be undone." confirmLabel="Cancel workout" onConfirm={onCancel} />
 <ConfirmDialog bind:this={deleteDialog} title={pendingDelete?.title ?? 'Remove item?'} description={pendingDelete?.description ?? ''} onConfirm={() => pendingDelete?.action()} />
 

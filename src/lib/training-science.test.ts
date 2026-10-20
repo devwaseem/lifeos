@@ -19,6 +19,7 @@ function completedWorkout(
     updatedAt: completedAt,
     notes: '',
     sessionRpe: null,
+    checkIn: null,
     exercises: [
       {
         id: `${id}-strength`,
@@ -30,7 +31,7 @@ function completedWorkout(
         notes: '',
         restSeconds: 120,
         restUntil: null,
-        progression: { minReps: 8, maxReps: 12, weightIncrement: 2.5, maxRpe: 10 },
+        progression: { minReps: 8, maxReps: 12, weightIncrement: 2.5 },
         sets: strengthSetRpes.map((rpe, index) => ({
           id: `${id}-strength-${index}`,
           weight: 100,
@@ -54,7 +55,7 @@ function completedWorkout(
         notes: '',
         restSeconds: 0,
         restUntil: null,
-        progression: { minReps: 0, maxReps: 0, weightIncrement: null, maxRpe: 10 },
+        progression: { minReps: 0, maxReps: 0, weightIncrement: null },
         sets: [{
           id: `${id}-treadmill-set`,
           weight: null,

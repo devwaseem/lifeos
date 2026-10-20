@@ -15,6 +15,7 @@ function workoutWithSets(sets: unknown[]): WorkoutSession {
     updatedAt: '2026-10-20T08:00:00.000Z',
     notes: '',
     sessionRpe: 7.5,
+    checkIn: null,
     exercises: [{
       id: 'exercise',
       exerciseId: 'bench',
@@ -25,7 +26,7 @@ function workoutWithSets(sets: unknown[]): WorkoutSession {
       notes: '',
       restSeconds: 120,
       restUntil: null,
-      progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, maxRpe: 9 },
+      progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
       sets,
     }],
   } as WorkoutSession

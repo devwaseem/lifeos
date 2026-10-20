@@ -10,12 +10,14 @@
     type ExerciseMetric,
     type ExerciseRange,
   } from '$lib/exercise-insights'
+  import { buildExerciseProgressionResults } from '$lib/progression'
   import { getExerciseStrengthProfile, getFatigueSignal } from '$lib/training-science'
   import type { ExerciseVideo, WorkoutSession } from '$lib/types'
   import { formatShortDate, formatVolume } from '$lib/utils'
   import { getWorkingSetNumber } from '$lib/workout-sets'
   import DottedAreaChart from './DottedAreaChart.svelte'
   import ExerciseVideos from './ExerciseVideos.svelte'
+  import ExerciseProgressionSignal from './ExerciseProgressionSignal.svelte'
   import ReadOnlyWorkoutSetHeader from './ReadOnlyWorkoutSetHeader.svelte'
   import ReadOnlyWorkoutSetRow from './ReadOnlyWorkoutSetRow.svelte'
 
@@ -39,6 +41,9 @@
     visibleHistoryCount = historyPageSize
   }
   $: history = getExerciseHistory(workouts, exerciseId)
+  $: latestProgression = history[0]
+    ? buildExerciseProgressionResults(history[0].workout, workouts).get(history[0].exercise.id)
+    : undefined
   $: visibleHistory = history.slice(0, visibleHistoryCount)
   $: remainingHistoryCount = Math.max(0, history.length - visibleHistory.length)
   $: completedHistorySets = history.reduce((total, entry) => total + entry.sets.filter((set) => !set.warmup).length, 0)
@@ -88,6 +93,14 @@
         {/if}
       </dl>
     {:else}
+    {#if latestProgression}
+      <section class="mt-5 rounded-2xl bg-paper p-4 sm:p-5" aria-labelledby="latest-progression-heading">
+        <p class="font-dot text-xs text-accent">LATEST COMPARISON</p>
+        <h2 id="latest-progression-heading" class="mt-1 text-xl font-medium">First working set</h2>
+        <div class="mt-4"><ExerciseProgressionSignal result={latestProgression} /></div>
+      </section>
+    {/if}
+
     <section class="mt-5 rounded-2xl bg-paper p-4 sm:p-5" aria-labelledby="progress-heading">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div><p class="font-dot text-xs text-accent">PROGRESS</p><h2 id="progress-heading" class="mt-1 text-xl font-medium">{exerciseMetricLabels[metric]}</h2></div>
@@ -153,6 +166,7 @@
       {#if history.length > 0}
         <div class="divide-y divide-rule overflow-hidden rounded-2xl bg-paper">
           {#each visibleHistory as entry}
+            {@const progressionResult = buildExerciseProgressionResults(entry.workout, workouts).get(entry.exercise.id)}
             {@const workingSetCount = entry.sets.filter((set) => !set.warmup).length}
             <article class="px-4 py-5 sm:px-5" aria-label={`${entry.workout.title}, ${workingSetCount} completed working ${workingSetCount === 1 ? 'set' : 'sets'}`}>
               <header class="flex items-start justify-between gap-4">
@@ -160,7 +174,10 @@
                   <p class="font-dot text-xs text-accent">{formatShortDate(entry.workout.completedAt ?? entry.workout.startedAt)}</p>
                   <h3 class="mt-1 truncate text-lg font-medium">{entry.workout.title}</h3>
                 </div>
-                <span class="shrink-0 rounded-full bg-canvas px-2.5 py-1 text-[0.625rem] font-medium uppercase text-muted">{workingSetCount} working {workingSetCount === 1 ? 'set' : 'sets'}</span>
+                <div class="flex shrink-0 flex-col items-end gap-2">
+                  {#if progressionResult}<ExerciseProgressionSignal result={progressionResult} compact={true} />{/if}
+                  <span class="rounded-full bg-canvas px-2.5 py-1 text-[0.625rem] font-medium uppercase text-muted">{workingSetCount} working {workingSetCount === 1 ? 'set' : 'sets'}</span>
+                </div>
               </header>
 
               {#if entry.exercise.notes}

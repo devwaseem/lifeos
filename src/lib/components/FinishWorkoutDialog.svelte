@@ -1,8 +1,10 @@
 <script lang="ts">
   import { Activity, BookmarkPlus, Medal, RefreshCw, X } from '@lucide/svelte'
+  import type { ExerciseProgressionResult } from '$lib/progression'
   import type { WorkoutFinishDecision, WorkoutFinishDisposition } from '$lib/types'
   import type { WorkoutStrengthHighlight } from '$lib/training-science'
   import RpeCurve from './RpeCurve.svelte'
+  import ExerciseProgressionSignal from './ExerciseProgressionSignal.svelte'
 
   export let mode: 'routine' | 'changed' | 'one-off'
   export let routineName = ''
@@ -12,6 +14,7 @@
   export let highlights: Array<{ id: string; title: string; description: string }> = []
   export let onConfirm: (decision: WorkoutFinishDecision) => void
   export let strengthHighlights: WorkoutStrengthHighlight[] = []
+  export let progressionResults: Array<{ exerciseName: string; result: ExerciseProgressionResult }> = []
 
   let dialog: HTMLDialogElement
   let notes = ''
@@ -43,6 +46,20 @@
         <ul class="mt-2 divide-y divide-rule">
           {#each highlights as highlight (highlight.id)}
             <li class="flex items-start gap-3 py-2.5"><span class="font-dot grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-xs text-accent">PR</span><span class="min-w-0"><span class="block truncate text-sm font-medium">{highlight.title}</span><span class="mt-0.5 block text-xs text-muted">{highlight.description}</span></span></li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
+    {#if progressionResults.length > 0}
+      <section class="mt-5 rounded-xl bg-canvas p-3" aria-label="First-set progression results">
+        <p class="text-xs font-medium uppercase">First-set results</p>
+        <ul class="mt-2 divide-y divide-rule">
+          {#each progressionResults as item (item.result.workoutExerciseId)}
+            <li class="flex items-center justify-between gap-3 py-2.5">
+              <span class="min-w-0 truncate text-sm font-medium">{item.exerciseName}</span>
+              <ExerciseProgressionSignal result={item.result} compact={true} />
+            </li>
           {/each}
         </ul>
       </section>

@@ -16,33 +16,20 @@ export interface SetProgressionTarget {
   rule: ProgressionRule
 }
 
-export type SetProgressionOutcome = 'progressed' | 'maintained' | 'below-previous' | 'baseline'
 
-export function getSetProgressionOutcome(set: WorkoutSet, target: SetProgressionTarget): SetProgressionOutcome | null {
-  if (!set.completed || set.warmup) return null
-  if (set.reps === null || target.previousReps === null) return 'baseline'
+export type ExerciseProgressionStatus = 'pending' | 'progressed' | 'maintained' | 'declined' | 'baseline' | 'not-comparable'
+export type ProgressionEffortTrend = 'lower' | 'same' | 'higher'
 
-  const currentWeight = set.weight ?? 0
-  const previousWeight = target.previousWeight ?? 0
-  const currentIsWeighted = currentWeight > 0
-  const previousIsWeighted = previousWeight > 0
-  if (currentIsWeighted !== previousIsWeighted) return 'baseline'
-
-  const currentPerformance = currentIsWeighted
-    ? currentWeight * (1 + set.reps / 30)
-    : set.reps
-  const previousPerformance = previousIsWeighted
-    ? previousWeight * (1 + target.previousReps / 30)
-    : target.previousReps
-
-  if (currentPerformance > previousPerformance) return 'progressed'
-  if (currentPerformance < previousPerformance) return 'below-previous'
-  if (set.rpe !== null && target.previousRpe !== null) {
-    if (set.rpe < target.previousRpe) return 'progressed'
-    if (set.rpe > target.previousRpe) return 'below-previous'
-  }
-  return 'maintained'
+export interface ExerciseProgressionResult {
+  workoutExerciseId: string
+  status: ExerciseProgressionStatus
+  previousSet: WorkoutSet | null
+  currentSet: WorkoutSet | null
+  target: SetProgressionTarget | null
+  repDelta: number | null
+  effortTrend: ProgressionEffortTrend | null
 }
+
 
 export function getEquipmentWeightIncrement(equipment: string) {
   if (equipment === 'Dumbbells' || equipment === 'Kettlebell') return 2
@@ -59,7 +46,6 @@ export function defaultProgressionRule(equipment: string): ProgressionRule {
     minReps: 8,
     maxReps: 12,
     weightIncrement: getEquipmentWeightIncrement(equipment),
-    maxRpe: 10,
   }
 }
 
@@ -73,8 +59,7 @@ export function normalizeProgressionRule(rule: Partial<ProgressionRule> | undefi
     : typeof increment === 'number' && Number.isFinite(increment) && increment > 0
       ? Math.min(100, Math.round(increment * 100) / 100)
       : defaults.weightIncrement
-  const maxRpe = Number.isFinite(rule?.maxRpe) ? Math.min(10, Math.max(1, Math.round(rule?.maxRpe ?? defaults.maxRpe))) : defaults.maxRpe
-  return { minReps, maxReps, weightIncrement, maxRpe }
+  return { minReps, maxReps, weightIncrement }
 }
 
 function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSet | undefined, exercise: WorkoutExercise): SetProgressionTarget {
@@ -95,10 +80,7 @@ function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSe
 
   const previousWeight = previous.weight
   const reachedCeiling = previous.reps >= rule.maxReps
-  const effortAllowsProgression = previous.rpe === null
-    || (previous.rpe < 10 && previous.rpe <= rule.maxRpe)
   const canIncreaseLoad = reachedCeiling
-    && effortAllowsProgression
     && previousWeight !== null
     && rule.weightIncrement !== null
 
@@ -116,7 +98,7 @@ function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSe
     }
   }
 
-  const canAddRep = effortAllowsProgression && previous.reps < rule.maxReps
+  const canAddRep = previous.reps < rule.maxReps
   return {
     setId,
     setIndex,
@@ -154,4 +136,103 @@ export function buildSetProgressionTargets(currentWorkout: WorkoutSession, worko
   }
 
   return targets
+}
+
+function getFirstWorkingSet(exercise: WorkoutExercise | undefined) {
+  return exercise?.sets.find((set) => !set.warmup)
+}
+
+function workoutTime(workout: WorkoutSession) {
+  return workout.completedAt ?? workout.startedAt
+}
+
+function getPreviousExerciseBefore(
+  workouts: WorkoutSession[],
+  currentWorkout: WorkoutSession,
+  exerciseId: string,
+) {
+  const currentTime = workoutTime(currentWorkout)
+  let previousWorkout: WorkoutSession | undefined
+  let previousExercise: WorkoutExercise | undefined
+
+  for (const workout of workouts) {
+    if (workout.id === currentWorkout.id || workout.status !== 'completed') continue
+    if (workoutTime(workout) >= currentTime) continue
+    const exercise = workout.exercises.find((candidate) => candidate.exerciseId === exerciseId)
+    const firstSet = getFirstWorkingSet(exercise)
+    if (!firstSet?.completed || firstSet.reps === null) continue
+    if (!previousWorkout || workoutTime(workout) > workoutTime(previousWorkout)) {
+      previousWorkout = workout
+      previousExercise = exercise
+    }
+  }
+
+  return previousExercise
+}
+
+function getEffortTrend(current: WorkoutSet | undefined, previous: WorkoutSet | undefined): ProgressionEffortTrend | null {
+  if (current?.rpe === null || current?.rpe === undefined || previous?.rpe === null || previous?.rpe === undefined) return null
+  const difference = current.rpe - previous.rpe
+  if (difference === 0) return 'same'
+  if (difference <= -1) return 'lower'
+  if (difference >= 1) return 'higher'
+  return null
+}
+
+function sameLoad(current: WorkoutSet, previous: WorkoutSet) {
+  return Math.abs((current.weight ?? 0) - (previous.weight ?? 0)) < 0.01
+}
+
+function getExerciseProgressionResult(
+  currentWorkout: WorkoutSession,
+  exercise: WorkoutExercise,
+  workouts: WorkoutSession[],
+): ExerciseProgressionResult {
+  const currentSet = getFirstWorkingSet(exercise)
+  const previousExercise = getPreviousExerciseBefore(workouts, currentWorkout, exercise.exerciseId)
+  const previousSet = getFirstWorkingSet(previousExercise)
+  const target = currentSet
+    ? targetFromPrevious(currentSet.id, 0, previousSet, exercise)
+    : null
+  const base = {
+    workoutExerciseId: exercise.id,
+    previousSet: previousSet ?? null,
+    currentSet: currentSet ?? null,
+    target,
+    effortTrend: getEffortTrend(currentSet, previousSet),
+  }
+
+  if (!currentSet?.completed || currentSet.reps === null) {
+    return { ...base, status: 'pending', repDelta: null }
+  }
+  if (!previousSet?.completed || previousSet.reps === null) {
+    return { ...base, status: 'baseline', repDelta: null }
+  }
+  if (sameLoad(currentSet, previousSet)) {
+    const repDelta = currentSet.reps - previousSet.reps
+    return {
+      ...base,
+      status: repDelta > 0 ? 'progressed' : repDelta < 0 ? 'declined' : 'maintained',
+      repDelta,
+    }
+  }
+  const completedPlannedIncrease = target?.action === 'increase-load'
+    && target.targetWeight !== null
+    && currentSet.weight !== null
+    && Math.abs(currentSet.weight - target.targetWeight) < 0.01
+    && currentSet.reps >= target.rule.minReps
+  return {
+    ...base,
+    status: completedPlannedIncrease ? 'progressed' : 'not-comparable',
+    repDelta: null,
+  }
+}
+
+export function buildExerciseProgressionResults(currentWorkout: WorkoutSession, workouts: WorkoutSession[]) {
+  const results = new Map<string, ExerciseProgressionResult>()
+  for (const exercise of currentWorkout.exercises) {
+    if (!supportsProgression(exercise)) continue
+    results.set(exercise.id, getExerciseProgressionResult(currentWorkout, exercise, workouts))
+  }
+  return results
 }

@@ -27,7 +27,10 @@
     </button>
     <button class="destination" on:click={() => onNavigate('settings')}>
       <span class="destination-icon"><Cloud class="size-5" /></span>
-      <span class="min-w-0 flex-1"><span class="block text-base font-medium">Data sync</span><span class="mt-1 flex items-center gap-1.5 text-xs text-muted"><span class:bg-success={online} class:bg-muted={!online} class="size-1.5 rounded-full"></span>{online ? syncLabel : 'Saved offline'}</span></span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-base font-medium">Data & AI</span>
+        <span class="mt-1 flex items-center gap-1.5 text-xs text-muted"><span class:bg-success={online} class:bg-muted={!online} class="size-1.5 rounded-full"></span>{online ? syncLabel : 'Saved offline'}</span>
+      </span>
       <ChevronRight class="size-5 shrink-0 text-muted" />
     </button>
   </nav>
