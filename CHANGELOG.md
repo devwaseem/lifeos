@@ -65,7 +65,7 @@
 - Reworked the home screen into a responsive bento composition with asymmetric calendar, recommendation, history, and workload modules.
 - Reworked the Today header into an open-background narrative briefing that greets Waseem Akram and folds the selected workout, estimated readiness, seven-day session count, training-load context, and cycle position into emphasized prose.
 - Removed the redundant cycle-advancement footer from the Today plan card and added history-aware Back actions to Routines, Exercises, and Data sync.
-- Replaced the Today header’s oversized day number with a reference-led weekday and full-date lockup, and removed the redundant add-workout button.
+- Replaced the Today header’s oversized day number with a reference-led weekday and full-date lockup, removed the redundant add-workout button, and clarified spacing around its inline status icons.
 - Replaced the collapsed workload disclosure with independent acute seven-day and chronic weekly-average cards.
 - Added Month, 3-month, 1-year, and scrollable all-time training-calendar ranges; the numbered Month grid identifies routines and mixed-routine days, while denser ranges use a single trained-day color without expandable day details.
 - Normalized workout and exercise histories into neutral, divider-led ledgers; removed the singled-out orange session and decorative LOG circle, added a conventional Start workout action, grouped the archive by month, and progressively rendered older records in bounded batches.
