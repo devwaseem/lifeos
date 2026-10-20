@@ -97,5 +97,6 @@
 - Changed systemic load to prefer recorded session RPE, fall back to the mean completed-set RPE for legacy workouts, ignore treadmill-style sets without RPE, and disclose how many sessions use the estimate.
 - Exposed each muscle-readiness estimate’s latest modeled set units and decay window, and clarified that personal records and subjective soreness are not model inputs.
 - Added an iPhone/iPad post-workout Apple Health export prompt backed by an owner-created Shortcut, x-callback success and error handling, durable local export receipts, and retry controls in saved-workout detail.
+- Fixed Apple Shortcut launches to percent-encode spaces instead of form-encoding them as `+`, preventing iOS from looking for a shortcut literally named `Log+LifeOS+Workout`.
 - Replaced JSON-blob D1 persistence with normalized workout, exercise, set, routine, secondary-muscle, and training-cycle tables; added lossless legacy backfill, analytics indexes, transactional aggregate writes, and revision-cursor incremental downloads.
 - Changed PWA registration to target the generated version-changing worker directly, bypass script caches, check immediately, and reload an existing installation once the new worker controls it.

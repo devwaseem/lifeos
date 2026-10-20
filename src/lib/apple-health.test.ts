@@ -30,7 +30,10 @@ describe('Apple Health shortcut export', () => {
   })
 
   it('encodes the payload and distinct completion callbacks', () => {
-    const url = new URL(createAppleHealthShortcutUrl(completedWorkout, 'attempt-456', 'https://lifeos.example'))
+    const shortcutUrl = createAppleHealthShortcutUrl(completedWorkout, 'attempt-456', 'https://lifeos.example')
+    expect(shortcutUrl).toContain('name=Log%20LifeOS%20Workout')
+    expect(shortcutUrl).not.toContain('name=Log+LifeOS+Workout')
+    const url = new URL(shortcutUrl)
     expect(url.protocol).toBe('shortcuts:')
     expect(url.hostname).toBe('x-callback-url')
     expect(url.pathname).toBe('/run-shortcut')

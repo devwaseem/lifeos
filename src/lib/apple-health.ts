@@ -80,15 +80,12 @@ function callbackUrl(origin: string, workoutId: string, attemptId: string, statu
 }
 
 export function createAppleHealthShortcutUrl(workout: WorkoutSession, attemptId: string, origin: string) {
-  const parameters = new URLSearchParams({
-    name: APPLE_HEALTH_SHORTCUT_NAME,
-    input: 'text',
-    text: JSON.stringify(createAppleHealthShortcutPayload(workout)),
-    'x-success': callbackUrl(origin, workout.id, attemptId, 'success'),
-    'x-cancel': callbackUrl(origin, workout.id, attemptId, 'cancelled'),
-    'x-error': callbackUrl(origin, workout.id, attemptId, 'error'),
-  })
-  return `shortcuts://x-callback-url/run-shortcut?${parameters}`
+  const payload = JSON.stringify(createAppleHealthShortcutPayload(workout))
+  const successUrl = callbackUrl(origin, workout.id, attemptId, 'success')
+  const cancelUrl = callbackUrl(origin, workout.id, attemptId, 'cancelled')
+  const errorUrl = callbackUrl(origin, workout.id, attemptId, 'error')
+
+  return `shortcuts://x-callback-url/run-shortcut?name=${encodeURIComponent(APPLE_HEALTH_SHORTCUT_NAME)}&input=text&text=${encodeURIComponent(payload)}&x-success=${encodeURIComponent(successUrl)}&x-cancel=${encodeURIComponent(cancelUrl)}&x-error=${encodeURIComponent(errorUrl)}`
 }
 
 export function readAppleHealthExportCallback(search: string): AppleHealthExportCallback | null {
