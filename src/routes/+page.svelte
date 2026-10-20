@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
   import type { TransitionConfig } from 'svelte/transition'
-  import { createAppleHealthShortcutUrl, createPendingAppleHealthExport, isAppleHealthShortcutAvailable, readAppleHealthExportCallback, type AppleHealthExportCallback, type AppleHealthExportRecord } from '$lib/apple-health'
+  import { createAppleHealthShortcutUrl, createPendingAppleHealthExport, getAppleHealthExportFailureMessage, isAppleHealthShortcutAvailable, readAppleHealthExportCallback, type AppleHealthExportCallback, type AppleHealthExportRecord } from '$lib/apple-health'
   import ActiveWorkoutView from '$lib/components/ActiveWorkoutView.svelte'
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte'
   import AppShell from '$lib/components/AppShell.svelte'
@@ -260,11 +260,7 @@
       status: succeeded ? 'exported' : 'pending',
       attemptId: null,
       exportedAt: succeeded ? new Date().toISOString() : existing.exportedAt,
-      lastError: succeeded
-        ? null
-        : callback.status === 'cancelled'
-          ? 'Export cancelled. Your workout is still safe in LifeOS.'
-          : 'Shortcuts could not add this workout to Apple Health. Try again.',
+      lastError: getAppleHealthExportFailureMessage(callback),
     }
     upsertAppleHealthExport(nextRecord)
     try {

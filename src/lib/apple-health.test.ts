@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createAppleHealthShortcutPayload, createAppleHealthShortcutUrl, readAppleHealthExportCallback } from '$lib/apple-health'
+import { createAppleHealthShortcutPayload, createAppleHealthShortcutUrl, getAppleHealthExportFailureMessage, readAppleHealthExportCallback } from '$lib/apple-health'
 import type { WorkoutSession } from '$lib/types'
 
 const completedWorkout: WorkoutSession = {
@@ -51,5 +51,24 @@ describe('Apple Health shortcut export', () => {
       errorMessage: 'Missing shortcut',
     })
     expect(readAppleHealthExportCallback('?view=history')).toBeNull()
+  })
+
+  it('preserves actionable shortcut runtime errors', () => {
+    expect(getAppleHealthExportFailureMessage({
+      status: 'error',
+      errorMessage: 'Log Workout requires Health access.',
+    })).toBe('Shortcuts: Log Workout requires Health access.')
+    expect(getAppleHealthExportFailureMessage({
+      status: 'error',
+      errorMessage: null,
+    })).toBe('Shortcuts could not add this workout to Apple Health. Try again.')
+    expect(getAppleHealthExportFailureMessage({
+      status: 'cancelled',
+      errorMessage: null,
+    })).toBe('Export cancelled. Your workout is still safe in LifeOS.')
+    expect(getAppleHealthExportFailureMessage({
+      status: 'success',
+      errorMessage: null,
+    })).toBeNull()
   })
 })

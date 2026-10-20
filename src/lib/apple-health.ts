@@ -21,6 +21,18 @@ export interface AppleHealthExportCallback {
   errorMessage: string | null
 }
 
+export function getAppleHealthExportFailureMessage(
+  callback: Pick<AppleHealthExportCallback, 'status' | 'errorMessage'>,
+) {
+  if (callback.status === 'success') return null
+  if (callback.status === 'cancelled') return 'Export cancelled. Your workout is still safe in LifeOS.'
+
+  const detail = callback.errorMessage?.trim()
+  return detail
+    ? `Shortcuts: ${detail.slice(0, 240)}`
+    : 'Shortcuts could not add this workout to Apple Health. Try again.'
+}
+
 interface AppleHealthShortcutPayload {
   schemaVersion: 1
   workoutId: string
