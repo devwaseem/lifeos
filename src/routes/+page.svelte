@@ -742,11 +742,11 @@
           {:else if view === 'more'}
             <MoreView {online} {syncLabel} onNavigate={navigate} />
           {:else if view === 'routines'}
-            <RoutineLibraryView routines={visibleRoutines} {trainingCycle} {customExercises} {activeWorkout} onSave={storeRoutine} onDelete={deleteRoutine} onStart={requestRoutineStart} onCreateExercise={createExercise} onSaveCycle={storeTrainingCycle} onDeleteCycle={deleteTrainingCycle} />
+            <RoutineLibraryView routines={visibleRoutines} {trainingCycle} {customExercises} {activeWorkout} onBack={() => navigateBack('more')} onSave={storeRoutine} onDelete={deleteRoutine} onStart={requestRoutineStart} onCreateExercise={createExercise} onSaveCycle={storeTrainingCycle} onDeleteCycle={deleteTrainingCycle} />
           {:else if view === 'exercises'}
-            <ExerciseLibraryView {customExercises} onCreate={createExercise} onOpenExercise={openExercise} />
+            <ExerciseLibraryView {customExercises} onBack={() => navigateBack('more')} onCreate={createExercise} onOpenExercise={openExercise} />
           {:else if view === 'settings'}
-            {#key `${settings.deviceId}:${settings.lastSyncedAt ?? 'never'}`}<SettingsView initialSettings={settings} {syncState} {syncError} onSync={handleSync} />{/key}
+            {#key `${settings.deviceId}:${settings.lastSyncedAt ?? 'never'}`}<SettingsView initialSettings={settings} {syncState} {syncError} onBack={() => navigateBack('more')} onSync={handleSync} />{/key}
           {:else if view === 'exercise' && selectedExerciseId}
             <ExerciseDetailView exerciseId={selectedExerciseId} exerciseName={selectedExerciseName} {workouts} videos={exerciseVideos.filter((video) => video.exerciseId === selectedExerciseId)} onSaveVideo={addExerciseVideo} onDeleteVideo={removeExerciseVideo} onBack={() => navigateBack(exerciseBackView)} />
           {:else if view === 'workout' && activeWorkout}

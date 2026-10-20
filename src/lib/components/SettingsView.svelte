@@ -1,16 +1,20 @@
 <script lang="ts">
-  import { Cloud, Database, RefreshCw } from '@lucide/svelte'
+  import { ArrowLeft, Cloud, Database, RefreshCw } from '@lucide/svelte'
   import type { SyncSettings } from '$lib/types'
   import { formatShortDate, formatTime } from '$lib/utils'
 
   export let initialSettings: SyncSettings
+  export let onBack: () => void
   export let syncState: 'idle' | 'syncing' | 'success' | 'error'
   export let syncError: string | null
   export let onSync: () => Promise<void>
 </script>
 
 <div class="mx-auto w-full max-w-5xl px-5 py-6 sm:px-6 lg:px-8 lg:py-7">
-  <header><p class="font-dot text-xs text-accent">SYSTEM</p><h1 class="mt-2 text-2xl font-medium text-balance">Storage & sync</h1><p class="mt-3 max-w-xl text-sm leading-6 text-muted text-pretty">Workouts stay available on this device and sync automatically while your Access session is active.</p></header>
+  <header class="flex items-start gap-3">
+    <button class="grid size-11 shrink-0 place-items-center rounded-full border border-ink" on:click={onBack} aria-label="Back to More"><ArrowLeft class="size-5" /></button>
+    <div class="min-w-0"><p class="font-dot text-xs text-accent">SYSTEM</p><h1 class="mt-2 text-2xl font-medium text-balance">Storage & sync</h1><p class="mt-3 max-w-xl text-sm leading-6 text-muted text-pretty">Workouts stay available on this device and sync automatically while your Access session is active.</p></div>
+  </header>
 
   <section class="mt-8 grid grid-cols-2 gap-3">
     <div class="flex min-h-36 flex-col justify-between rounded-2xl bg-accent p-5 text-accent-ink"><Database class="size-5" /><span><span class="font-dot block text-2xl">LOCAL</span><span class="mt-1 block text-xs text-accent-ink/80">Always available</span></span></div>

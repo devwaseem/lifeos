@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, ArrowRight, CirclePlus, History, Layers3, Moon, Repeat2, ShieldAlert } from '@lucide/svelte'
+  import { Activity, ArrowRight, CalendarDays, Dumbbell, Gauge, History, Layers3, Moon, Repeat2, ShieldAlert } from '@lucide/svelte'
   import { getCurrentCycleSlot, getCycleRoutine } from '$lib/training-cycle'
   import { getRecommendedRoutine, getTrainingReadiness, type MuscleRecovery } from '$lib/training-readiness'
   import { getFatigueSignal, getMuscleDose, getSystemicLoad } from '$lib/training-science'
@@ -23,8 +23,15 @@
   export let onManageRoutines: () => void
   export let onViewHistory: () => void
 
+
   let forceOverrideOpen = false
-  const dateLabel = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())
+  let headerDateKey = ''
+  let weekdayShortLabel = ''
+  let monthDayLabel = ''
+  let yearLabel = ''
+
+  const monthDayFormatter = new Intl.DateTimeFormat('en', { month: 'long', day: 'numeric' })
+  const shortWeekdayFormatter = new Intl.DateTimeFormat('en', { weekday: 'short' })
 
   $: selectedRoutine = routines.find((routine) => routine.id === selectedRoutineId)
   $: cycleSlot = getCurrentCycleSlot(trainingCycle)
@@ -78,6 +85,22 @@
         : plannedRoutine
           ? `Start ${plannedRoutine.name}`
           : 'Choose workout'
+
+  $: currentDate = new Date(now)
+  $: currentDateKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}-${currentDate.getDate()}`
+  $: if (currentDateKey !== headerDateKey) updateDateHeader(currentDate, currentDateKey)
+  $: greeting = currentDate.getHours() < 12 ? 'Good morning,' : currentDate.getHours() < 18 ? 'Good afternoon,' : 'Good evening,'
+  $: activeSetCount = activeWorkout ? getCompletedSetCount(activeWorkout) : 0
+  $: activeSetLabel = `${activeSetCount} ${activeSetCount === 1 ? 'set' : 'sets'}`
+  $: recentSessionLabel = `${systemicLoad.recentSessionCount} ${systemicLoad.recentSessionCount === 1 ? 'session' : 'sessions'}`
+  $: recentLoadNarrative = systemicLoad.ratio === null ? 'still building a baseline' : systemicLoadLabel.toLowerCase()
+
+  function updateDateHeader(date: Date, dateKey: string) {
+    headerDateKey = dateKey
+    weekdayShortLabel = shortWeekdayFormatter.format(date)
+    monthDayLabel = monthDayFormatter.format(date)
+    yearLabel = String(date.getFullYear())
+  }
 
   function changeRoutine(routineId: string) {
     forceOverrideOpen = false
@@ -149,12 +172,38 @@
 </script>
 
 <div class="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-7 xl:px-10">
-  <header class="relative flex min-h-11 items-center justify-center">
-    <p class="text-sm font-medium">{dateLabel}</p>
-    <button class="absolute right-0 grid size-11 place-items-center rounded-full border border-ink" on:click={activeWorkout ? onResume : onStart} aria-label={activeWorkout ? 'Continue workout' : 'Choose workout'}><CirclePlus class="size-6" /></button>
+  <header class="home-header px-1 pt-2 sm:px-2 sm:pt-4" aria-labelledby="home-summary-heading">
+    <div class="flex items-start justify-between gap-5">
+      <div class="flex items-center gap-3" aria-label={`${weekdayShortLabel}, ${monthDayLabel}, ${yearLabel}`}>
+        <span class="text-[4.25rem] font-semibold leading-[0.85] tracking-[-0.07em] sm:text-[5.25rem]">{weekdayShortLabel}</span>
+        <span class:bg-success={Boolean(activeWorkout)} class:bg-accent={!activeWorkout} class="mt-1 size-3 rounded-full ring-4 ring-accent-soft" aria-hidden="true"></span>
+      </div>
+      <p class="pt-1 text-right text-sm font-medium leading-5 text-muted sm:text-base sm:leading-6">
+        <span class="block">{monthDayLabel}</span>
+        <span class="block">{yearLabel}</span>
+      </p>
+    </div>
+
+
+    <div class="mt-10 max-w-5xl sm:mt-12">
+      <h1 id="home-summary-heading" class="home-summary text-[clamp(1.5rem,3.1vw,2.5rem)] font-normal tracking-[-0.02em] text-muted">
+        <span>{greeting}</span>{' '}<span class="font-medium text-ink">Waseem Akram.</span>
+        {#if activeWorkout}
+          {' '}Your{' '}<Dumbbell class="mr-[0.08em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">{activeWorkout.title}</span>{' '}workout is underway with{' '}<span class="font-semibold text-ink">{activeSetLabel}</span>{' '}logged. Recent training load is{' '}<span class="font-medium text-ink">{recentLoadNarrative}.</span>
+        {:else if restDay}
+          {' '}Today is your{' '}<Moon class="mr-[0.08em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">recovery slot.</span>{' '}You’ve logged{' '}<CalendarDays class="mr-[0.08em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-semibold text-ink">{recentSessionLabel}</span>{' '}in the last 7 days. Recent training load is{' '}<span class="font-medium text-ink">{recentLoadNarrative}.</span>
+        {:else if cycleNeedsAttention}
+          {' '}Your{' '}<Repeat2 class="mr-[0.08em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">training cycle needs attention.</span>{' '}Replace the unavailable routine to keep the completion-driven cycle moving.
+        {:else if plannedRoutine}
+          {' '}Your{' '}<Dumbbell class="mr-[0.08em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">{plannedRoutine.name}</span>{' '}workout is ready with{' '}<Gauge class="mr-[0.08em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-semibold text-ink">{insights.targetReadiness}%</span>{' '}estimated readiness. You’ve logged{' '}<CalendarDays class="mr-[0.08em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-semibold text-ink">{recentSessionLabel}</span>{' '}in the last 7 days. Recent training load is{' '}<span class="font-medium text-ink">{recentLoadNarrative}.</span>{#if cyclePosition}{' '}You’re on{' '}<span class="font-medium text-ink">{cyclePosition.toLowerCase().replace(' / ', ' of ')}.</span>{/if}
+        {:else}
+          {' '}You don’t have a workout selected yet.{' '}<span class="font-medium text-ink">Choose a routine</span>{' '}to see its target-muscle readiness and start training.
+        {/if}
+      </h1>
+    </div>
   </header>
 
-  <main class="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-12">
+  <main class="mt-12 grid grid-cols-2 gap-4 lg:grid-cols-12">
     <section class="col-span-2 flex flex-col rounded-2xl bg-paper p-5 sm:p-6 lg:col-span-5" aria-labelledby="today-plan-heading">
       <div class="flex items-start justify-between gap-4">
         <div class="min-w-0"><p class="font-dot text-xs text-accent">TODAY</p><h1 id="today-plan-heading" class="mt-2 truncate text-3xl font-medium leading-none sm:text-4xl">{planName}</h1></div>
@@ -199,8 +248,6 @@
         </button>
         {#if restDay}
           <div class="mt-2 grid grid-cols-2 gap-2"><button class="min-h-11 rounded-xl bg-canvas px-3 text-sm font-medium" on:click={onStart}>Train anyway</button><button class="min-h-11 rounded-xl bg-canvas px-3 text-sm font-medium" on:click={onManageRoutines}>Edit cycle</button></div>
-        {:else if cycleActive}
-          <button class="mt-2 flex min-h-11 w-full items-center justify-between px-1 text-left text-xs text-muted" on:click={onManageRoutines}><span>Advances when this workout is finished.</span><span class="font-medium text-ink">Edit cycle</span></button>
         {/if}
         <div class:open={forceOverrideOpen} class="override-reveal" aria-hidden={!forceOverrideOpen} inert={!forceOverrideOpen}>
           <div><div class="pt-3"><div class="rounded-xl bg-danger-soft p-4 text-danger"><p class="text-sm font-medium">Three or more consecutive training days detected.</p><p class="mt-1 text-xs leading-5">Continue only if this additional load is intentional and recovery is adequate.</p><div class="mt-4 grid grid-cols-2 gap-2"><button class="min-h-12 rounded-xl bg-paper px-3 text-sm font-medium" on:click={() => { forceOverrideOpen = false }}>Not today</button><button class="min-h-12 rounded-xl bg-danger px-3 text-sm font-medium text-danger-ink" on:click={forceOverride}>Force override</button></div></div></div></div>
@@ -331,6 +378,11 @@
 </div>
 
 <style>
+  .home-summary {
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+
   .fatigue-action { background: var(--color-danger); color: var(--color-danger-ink); }
   .confidence-high { background: var(--color-success-soft); color: var(--color-success); }
   .recovery-low { color: var(--color-danger); }

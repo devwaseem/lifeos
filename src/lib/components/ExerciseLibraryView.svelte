@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronRight, Plus, Search, X } from '@lucide/svelte'
+  import { ArrowLeft, ChevronRight, Plus, Search, X } from '@lucide/svelte'
   import { equipmentOptions, muscleOptions } from '$lib/data/exercise-options'
   import { exerciseLibrary } from '$lib/data/exercises'
   import type { ExerciseDefinition } from '$lib/types'
@@ -7,6 +7,7 @@
   import ExerciseForm from './ExerciseForm.svelte'
 
   export let customExercises: ExerciseDefinition[]
+  export let onBack: () => void
   export let onCreate: (exercise: ExerciseDefinition) => void
   export let onOpenExercise: (exerciseId: string, exerciseName: string) => void
 
@@ -34,7 +35,10 @@
 
 <div class="mx-auto w-full max-w-6xl px-5 py-6 sm:px-6 lg:px-8 lg:py-7">
   <header class="flex items-start justify-between gap-4">
-    <div><p class="font-dot text-xs text-accent">MOVEMENT INDEX</p><h1 class="mt-2 text-2xl font-medium">Exercises</h1><p class="mt-1 text-sm text-muted">Browse the library or define your own movement.</p></div>
+    <div class="flex min-w-0 items-start gap-3">
+      <button class="grid size-11 shrink-0 place-items-center rounded-full border border-ink" on:click={onBack} aria-label="Back to More"><ArrowLeft class="size-5" /></button>
+      <div class="min-w-0"><p class="font-dot text-xs text-accent">MOVEMENT INDEX</p><h1 class="mt-2 text-2xl font-medium">Exercises</h1><p class="mt-1 text-sm text-muted">Browse the library or define your own movement.</p></div>
+    </div>
     <button class="grid size-11 shrink-0 place-items-center rounded-full border border-ink" on:click={() => creator.showModal()} aria-label="Create exercise"><Plus class="size-5" /></button>
   </header>
 

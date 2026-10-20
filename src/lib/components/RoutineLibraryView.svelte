@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowDown, ArrowUp, ChevronRight, Dumbbell, Pencil, Play, Plus, Trash2, X } from '@lucide/svelte'
+  import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, Dumbbell, Pencil, Play, Plus, Trash2, X } from '@lucide/svelte'
   import { tick } from 'svelte'
   import type { ExerciseDefinition, ProgressionRule, RoutineExercise, RoutineTemplate, TrainingCycle, WorkoutSession } from '$lib/types'
   import { createRoutineExercise, getRoutineMuscleGroups } from '$lib/routines'
@@ -13,6 +13,7 @@
   export let trainingCycle: TrainingCycle | null
   export let customExercises: ExerciseDefinition[]
   export let activeWorkout: WorkoutSession | undefined
+  export let onBack: () => void
   export let onSave: (routine: RoutineTemplate) => void
   export let onDelete: (routine: RoutineTemplate) => void
   export let onStart: (routine: RoutineTemplate) => void
@@ -105,7 +106,10 @@
 
 <div class="mx-auto min-w-0 w-full max-w-6xl px-5 py-6 sm:px-6 lg:px-8 lg:py-7">
   <header class="flex min-w-0 items-start justify-between gap-4">
-    <div class="min-w-0"><p class="font-dot text-xs text-accent">PROGRAM INDEX</p><h1 class="mt-2 text-2xl font-medium">Routines</h1><p class="mt-1 text-sm text-muted">Reusable workout structures for the sessions you repeat.</p></div>
+    <div class="flex min-w-0 items-start gap-3">
+      <button class="grid size-11 shrink-0 place-items-center rounded-full border border-ink" on:click={onBack} aria-label="Back to More"><ArrowLeft class="size-5" /></button>
+      <div class="min-w-0"><p class="font-dot text-xs text-accent">PROGRAM INDEX</p><h1 class="mt-2 text-2xl font-medium">Routines</h1><p class="mt-1 text-sm text-muted">Reusable workout structures for the sessions you repeat.</p></div>
+    </div>
     <button class="grid size-11 shrink-0 place-items-center rounded-full border border-ink" on:click={openCreate} aria-label="Create routine"><Plus class="size-5" /></button>
   </header>
 
