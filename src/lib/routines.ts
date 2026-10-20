@@ -1,8 +1,9 @@
-import type { ExerciseDefinition, RoutineExercise, RoutineTemplate, WorkoutExercise, WorkoutSession, WorkoutSet } from '$lib/types'
+import type { ExerciseDefinition, RoutineExercise, RoutineTemplate, WorkoutExercise, WorkoutSession } from '$lib/types'
 import { defaultProgressionRule, normalizeProgressionRule } from '$lib/progression'
 import { resolveSecondaryMuscles } from '$lib/muscle-contributions'
 import { newId } from '$lib/utils'
 import { DEFAULT_REST_SECONDS } from '$lib/workouts'
+import { countWorkingSets, createWorkoutSet, getMatchingPreviousSet, getPreviousWorkoutExercise } from '$lib/workout-sets'
 
 const DEFAULT_SET_COUNT = 3
 const MAX_SET_COUNT = 20
@@ -23,6 +24,7 @@ export function createRoutineExercise(exercise: ExerciseDefinition): RoutineExer
     notes: '',
     restSeconds: DEFAULT_REST_SECONDS,
     setCount: DEFAULT_SET_COUNT,
+    hasWarmupSet: false,
     progression: defaultProgressionRule(exercise.equipment),
   }
 }
@@ -45,6 +47,7 @@ export function normalizeRoutine(routine: RoutineTemplate): RoutineTemplate {
           ? exercise.restSeconds
           : DEFAULT_REST_SECONDS,
         setCount: normalizeSetCount(exercise.setCount),
+        hasWarmupSet: exercise.hasWarmupSet === true,
         progression: normalizeProgressionRule(exercise.progression, exercise.equipment),
       }))
       : [],
@@ -55,22 +58,15 @@ export function normalizeRoutines(routines: RoutineTemplate[]) {
   return routines.map(normalizeRoutine).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
-function emptySet(): WorkoutSet {
-  return {
-    id: newId(),
-    weight: null,
-    reps: null,
-    rpe: null,
-    durationSeconds: null,
-    distanceMeters: null,
-    completed: false,
-    completedAt: null,
-    failure: false,
-    notes: '',
-  }
-}
 
-function workoutExerciseFromRoutine(exercise: RoutineExercise): WorkoutExercise {
+function workoutExerciseFromRoutine(
+  exercise: RoutineExercise,
+  previous: WorkoutExercise | undefined,
+): WorkoutExercise {
+  const workingSets = Array.from(
+    { length: normalizeSetCount(exercise.setCount) },
+    (_, index) => createWorkoutSet(false, getMatchingPreviousSet(previous, false, index)),
+  )
   return {
     id: newId(),
     exerciseId: exercise.exerciseId,
@@ -82,7 +78,9 @@ function workoutExerciseFromRoutine(exercise: RoutineExercise): WorkoutExercise 
     restSeconds: exercise.restSeconds,
     restUntil: null,
     progression: normalizeProgressionRule(exercise.progression, exercise.equipment),
-    sets: Array.from({ length: normalizeSetCount(exercise.setCount) }, emptySet),
+    sets: exercise.hasWarmupSet
+      ? [createWorkoutSet(true, getMatchingPreviousSet(previous, true, 0)), ...workingSets]
+      : workingSets,
   }
 }
 
@@ -90,6 +88,7 @@ export function createWorkoutFromRoutine(
   routine: RoutineTemplate,
   timestamp = new Date().toISOString(),
   cycleSlotId: string | null = null,
+  workouts: WorkoutSession[] = [],
 ): WorkoutSession {
   return {
     id: newId(),
@@ -102,7 +101,10 @@ export function createWorkoutFromRoutine(
     updatedAt: timestamp,
     notes: '',
     sessionRpe: null,
-    exercises: routine.exercises.map(workoutExerciseFromRoutine),
+    exercises: routine.exercises.map((exercise) => workoutExerciseFromRoutine(
+      exercise,
+      getPreviousWorkoutExercise(workouts, exercise.exerciseId),
+    )),
   }
 }
 
@@ -135,7 +137,8 @@ export function routineMatchesWorkout(routine: RoutineTemplate, workout: Workout
       && template.progression.maxReps === exercise.progression.maxReps
       && template.progression.weightIncrement === exercise.progression.weightIncrement
       && template.progression.maxRpe === exercise.progression.maxRpe
-      && normalizeSetCount(template.setCount) === exercise.sets.length
+      && normalizeSetCount(template.setCount) === countWorkingSets(exercise.sets)
+      && template.hasWarmupSet === exercise.sets.some((set) => set.warmup)
   })
 }
 
@@ -163,7 +166,8 @@ export function routineFromWorkout(
         secondaryMuscles: resolveSecondaryMuscles(exercise),
         notes: exercise.notes,
         restSeconds: exercise.restSeconds,
-        setCount: Math.max(1, exercise.sets.length),
+        setCount: Math.max(1, countWorkingSets(exercise.sets)),
+        hasWarmupSet: exercise.sets.some((set) => set.warmup),
         progression: normalizeProgressionRule(exercise.progression, exercise.equipment),
       }
     }),

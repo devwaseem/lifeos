@@ -167,6 +167,16 @@
               <div class="mt-3 grid grid-cols-[minmax(0,1fr)_8rem] gap-2">
                 <label class="rounded-xl bg-paper px-3 py-2"><span class="text-[0.6875rem] font-medium uppercase text-muted">Rest timer</span><select class="mt-1 w-full bg-transparent text-sm font-medium outline-none" value={exercise.restSeconds} on:change={(event) => updateExercise(exercise.id, { restSeconds: Number(event.currentTarget.value) })}><option value={0}>Off</option><option value={30}>30 seconds</option><option value={60}>1 minute</option><option value={90}>1:30 minutes</option><option value={120}>2 minutes</option><option value={180}>3 minutes</option><option value={300}>5 minutes</option></select></label>
                 <div class="rounded-xl bg-paper px-2 py-2"><span class="block text-center text-[0.6875rem] font-medium uppercase text-muted">Sets</span><div class="mt-1 grid grid-cols-3 items-center"><button class="grid size-8 place-items-center rounded-full text-lg" disabled={exercise.setCount <= 1} on:click={() => updateExercise(exercise.id, { setCount: Math.max(1, exercise.setCount - 1) })} aria-label={`Remove a set from ${exercise.name}`}>−</button><span class="font-dot text-center text-lg">{exercise.setCount}</span><button class="grid size-8 place-items-center rounded-full text-lg" disabled={exercise.setCount >= 20} on:click={() => updateExercise(exercise.id, { setCount: Math.min(20, exercise.setCount + 1) })} aria-label={`Add a set to ${exercise.name}`}>+</button></div></div>
+                <button
+                  type="button"
+                  class={`col-span-2 flex min-h-12 items-center gap-3 rounded-xl px-3 text-left ${exercise.hasWarmupSet ? 'bg-accent-soft text-accent' : 'bg-paper text-muted'}`}
+                  role="switch"
+                  aria-checked={exercise.hasWarmupSet}
+                  on:click={() => updateExercise(exercise.id, { hasWarmupSet: !exercise.hasWarmupSet })}
+                >
+                  <span class="font-dot grid size-8 shrink-0 place-items-center rounded-full bg-canvas text-sm">W</span>
+                  <span><span class="block text-xs font-medium">Warmup set</span><span class="mt-0.5 block text-[0.6875rem] opacity-75">{exercise.hasWarmupSet ? 'Included before working sets' : 'Optional · not counted as a working set'}</span></span>
+                </button>
               </div>
               <label class="mt-2 block rounded-xl bg-paper px-3 py-2"><span class="text-[0.6875rem] font-medium uppercase text-muted">Routine note</span><input class="mt-1 w-full bg-transparent text-sm outline-none placeholder:text-muted" value={exercise.notes} on:input={(event) => updateExercise(exercise.id, { notes: event.currentTarget.value })} placeholder="Setup or coaching cue" aria-label={`${exercise.name} routine note`} /></label>
               {#if supportsProgression(exercise)}

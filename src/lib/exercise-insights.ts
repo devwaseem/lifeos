@@ -62,6 +62,7 @@ export function getExerciseStats(history: ExerciseHistoryEntry[]): ExerciseStats
   for (const entry of history) {
     let sessionVolume = 0
     for (const set of entry.sets) {
+      if (set.warmup) continue
       const weight = set.weight ?? 0
       const reps = set.reps ?? 0
       heaviest = Math.max(heaviest, weight)
@@ -80,6 +81,7 @@ export function getWeightRecords(history: ExerciseHistoryEntry[]): WeightRecord[
   const records = new Map<number, WeightRecord>()
   for (const entry of history) {
     for (const set of entry.sets) {
+      if (set.warmup) continue
       if (set.weight === null || set.reps === null) continue
       const existing = records.get(set.weight)
       if (!existing || set.reps > existing.reps) {
@@ -111,12 +113,13 @@ export function buildExerciseSeries(
     monday.setDate(monday.getDate() - day)
     monday.setHours(0, 0, 0, 0)
     const key = monday.toISOString().slice(0, 10)
-    const weights = entry.sets.map((set) => set.weight ?? 0)
-    const reps = entry.sets.map((set) => set.reps ?? 0)
-    const setVolumes = entry.sets.map((set, index) => weights[index] * reps[index])
+    const workingSets = entry.sets.filter((set) => !set.warmup)
+    const weights = workingSets.map((set) => set.weight ?? 0)
+    const reps = workingSets.map((set) => set.reps ?? 0)
+    const setVolumes = workingSets.map((set, index) => weights[index] * reps[index])
     const valuesByMetric: Record<ExerciseMetric, number> = {
       heaviest: Math.max(0, ...weights),
-      oneRepMax: Math.max(0, ...entry.sets.map((set) => estimateSetE1rm(set) ?? 0)),
+      oneRepMax: Math.max(0, ...workingSets.map((set) => estimateSetE1rm(set) ?? 0)),
       bestSetVolume: Math.max(0, ...setVolumes),
       sessionVolume: setVolumes.reduce((total, value) => total + value, 0),
       totalReps: reps.reduce((total, value) => total + value, 0),

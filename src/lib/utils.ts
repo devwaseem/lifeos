@@ -35,7 +35,7 @@ export function formatCountdown(totalSeconds: number) {
 export function getWorkoutVolume(workout: WorkoutSession) {
   return workout.exercises.reduce(
     (total, exercise) => total + exercise.sets.reduce((sum, set) => {
-      if (!set.completed || set.weight === null || set.reps === null) return sum
+      if (set.warmup || !set.completed || set.weight === null || set.reps === null) return sum
       return sum + set.weight * set.reps
     }, 0),
     0,
@@ -45,7 +45,7 @@ export function getWorkoutVolume(workout: WorkoutSession) {
 export function getLiveWorkoutVolume(workout: WorkoutSession) {
   return workout.exercises.reduce(
     (total, exercise) => total + exercise.sets.reduce(
-      (sum, set) => sum + (set.weight ?? 0) * (set.reps ?? 0),
+      (sum, set) => set.warmup ? sum : sum + (set.weight ?? 0) * (set.reps ?? 0),
       0,
     ),
     0,
@@ -53,12 +53,12 @@ export function getLiveWorkoutVolume(workout: WorkoutSession) {
 }
 
 export function getWorkoutSetCount(workout: WorkoutSession) {
-  return workout.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)
+  return workout.exercises.reduce((total, exercise) => total + exercise.sets.filter((set) => !set.warmup).length, 0)
 }
 
 export function getCompletedSetCount(workout: WorkoutSession) {
   return workout.exercises.reduce(
-    (total, exercise) => total + exercise.sets.filter((set) => set.completed).length,
+    (total, exercise) => total + exercise.sets.filter((set) => set.completed && !set.warmup).length,
     0,
   )
 }

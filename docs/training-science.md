@@ -22,38 +22,41 @@ Every calculation and UI explanation should expose its evidence status.
 
 | Label | Meaning | Examples |
 | --- | --- | --- |
-| **Observed** | A value directly logged by the user. | Weight, repetitions, set RPE, failure flag, session duration. |
+| **Observed** | A value directly logged by the user. | Weight, repetitions, set RPE, warmup marker, session duration. |
 | **Validated construct** | A measured construct supported for the stated use, but still subject to individual and protocol variation. | RPE/RIR as perceived-effort measures; session-RPE load as a within-person internal-load index. |
 | **Derived estimate** | An arithmetic estimate from observed data, not a direct physiological measurement. | e1RM, weekly session load, acute:chronic ratio. |
 | **Pragmatic heuristic** | A transparent product rule chosen to make data actionable. It is not a validated diagnostic or universal threshold. | 0–3 RIR “hard set,” performance-suppression alert, deload suggestion, confidence cutoffs. |
 
 A confidence label indicates logged-data completeness only. Comparability still depends on the same exercise ID representing a sufficiently consistent protocol; the app does not verify that condition.
 
-## RPE/RIR-based autoregulation
+## RPE/RIR-based progression
 
 ### Definitions and source-backed use
 
 - **RIR** is the user’s estimate of repetitions remaining before momentary muscular failure.
 - On the resistance-training-specific RIR-RPE scale, `RPE 10 = 0 RIR`, `RPE 9 = 1 RIR`, and so on. Zourdos et al. observed a strong inverse relation between this scale and squat velocity in both experienced and novice lifters ([Zourdos et al., 2016](https://pubmed.ncbi.nlm.nih.gov/26049792/)).
-- **Autoregulation** means changing a training variable in response to observed performance, readiness, or recovery rather than applying an inflexible percentage prescription. A review finds RIR- and velocity-based adjustments practical and preliminarily useful, while emphasizing heterogeneous evidence and individual response ([Helms et al., 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7706636/)).
+- **Progression** means changing a training variable in response to observed performance rather than applying an inflexible percentage prescription. Reviews describe RIR-based adjustment as practical and preliminarily useful while emphasizing heterogeneous evidence and individual response ([Helms et al., 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7706636/)).
 
 ### Implementation
 
-LifeOS stores the user-entered set RPE unchanged and currently interprets the 1–10 input as a resistance-training RIR-based scale:
+LifeOS accepts only `6`, `7`, `7.5`, `8`, `8.5`, `9`, `9.5`, and `10` for set and session RPE. The set picker describes those values through estimated repetitions in reserve, from 4 or more repetitions at RPE 6 to no repetitions possible at RPE 10. It stores the selected value unchanged and interprets it as:
 
 ```text
-estimated_RIR = clamp(10 − set_RPE, 0, 5)
+estimated_RIR = clamp(10 − set_RPE, 0, 4)
 ```
 
-Each routine exercise stores a minimum and maximum repetition target, load increment, and RPE ceiling. The historical target comes from the corresponding set in the latest completed session:
+Warmup sets are explicitly marked, show RPE as not applicable without exposing the picker, and are excluded from working-set counts, volume, records, progression targets, readiness, muscle dose, and strength estimates. Their stored RPE is always `null`.
 
-- Below the repetition ceiling and not failed or above the effort ceiling: add one repetition.
+Each routine exercise stores a minimum and maximum repetition target, load increment, and RPE ceiling. When a workout starts, each warmup and working set is prefilled from the matching set in the latest completed same-exercise session, including load, repetitions, and working-set RPE; if the new routine has more working sets, the final known working set is repeated. The historical progression target also comes from the corresponding working set:
+
+- Below the repetition ceiling and below both RPE 10 and the configured effort ceiling: add one repetition.
 - At the repetition ceiling under the same conditions: add one configured load increment and return to the minimum repetitions.
+- RPE 10 always repeats the previous prescription because it represents no repetitions remaining. Only a completed RPE 10 set receives the max-effort indicator; a carried-forward historical RPE does not mark an incomplete set as failed.
 - A prior set with missing RPE may still produce a repetition-based historical target because effort is unknown rather than assumed excessive.
 
-After a set is completed in the active workout, failure or RPE above the ceiling lowers the next live load by one configured increment. RPE at least one point below the ceiling permits the calculated progression; RPE at the ceiling repeats the result. Missing RPE preserves the fallback historical target and marks the effort-based adjustment low confidence.
+Completing or editing an earlier set in the active workout does not alter the displayed previous-workout values or the historical target. Targets are **suggestions** and do not overwrite values after workout creation. The increments, target band, and adjustment rules are product heuristics rather than universal prescriptions.
 
-All targets are **suggestions**. They never overwrite entered load or repetitions. The increments, target band, and adjustment rules are product heuristics rather than universal prescriptions.
+Before completion, the set strip shows the immutable previous result and suggested target. After completion, it is replaced by an outcome: **Progressed**, **Maintained**, **Below previous**, or **Baseline logged**. Weighted sets compare Epley load-and-repetition scores; bodyweight sets compare repetitions. Equal performances use RPE as a tiebreaker, where lower effort is progress and higher effort is below previous. Missing or structurally incomparable history produces a baseline instead of a fabricated trend.
 
 ### Limitations
 
@@ -63,17 +66,16 @@ Accordingly:
 
 - Do not convert a missing RPE to a fabricated RIR.
 - Treat novice, unfamiliar-exercise, low-load/high-repetition, and unsupervised RIR entries as lower-confidence inputs.
-- Keep RPE/RIR, failure, repetitions, load, tempo/protocol notes, and exercise identity separate. They are related but not interchangeable.
+- Keep RPE/RIR, repetitions, load, tempo/protocol notes, warmup status, and exercise identity separate. They are related but not interchangeable.
 
 ## RPE-adjusted estimated 1RM (e1RM)
 
 ### Calculation
 
-The current implementation accepts only a completed set with positive external load, 1–15 completed repetitions, and either set RPE or a failure flag:
+The current implementation accepts only a completed, non-warmup set with positive external load, 1–15 completed repetitions, and a supported set RPE:
 
 ```text
-observed_RPE = 10 when failure, otherwise set_RPE
-estimated_RIR = clamp(10 − observed_RPE, 0, 5)
+estimated_RIR = clamp(10 − set_RPE, 0, 5)
 estimated_repetitions_to_failure =
   min(20, completed_repetitions + estimated_RIR)
 e1RM_Epley =
@@ -96,11 +98,11 @@ The repetitions-at-%1RM relation varies between people and exercises; it is not 
 
 ### Operational and implementation definition
 
-LifeOS currently applies the resistance-training RIR-RPE interpretation directly as an RPE threshold. A set is considered only after its entire workout has status `completed`:
+LifeOS currently applies the resistance-training RIR-RPE interpretation directly as an RPE threshold. A working set is considered only after its entire workout has status `completed`; warmups are excluded:
 
 ```text
-hard_set_credit(set) = 1  when workout and set are completed
-                          and (failure or set_RPE ≥ 7)
+hard_set_credit(set) = 1  when workout and working set are completed
+                          and set_RPE ≥ 7
                        0  otherwise
 
 muscle_set_equivalent =
@@ -109,7 +111,7 @@ muscle_set_equivalent =
 
 `RPE 7–10` corresponds operationally to an estimated `0–3 RIR` band. A primary muscle normally receives a fraction of `1.0`; secondary muscles receive their saved fractional contribution. Decimal values are therefore expected and are set-equivalent accounting values, not literal set counts.
 
-A completed non-failure set with missing RPE receives zero estimated credit in the current aggregate because the result has no third `unknown` bucket. Its contribution fraction remains in the effort-coverage denominator, lowering confidence. Product copy MUST describe this as **uncredited because effort is unknown**, not as proof that the set was easy or non-productive. Do not impute partial credit from missing effort.
+A completed working set with missing RPE receives zero estimated credit in the current aggregate because the result has no third `unknown` bucket. Its contribution fraction remains in the effort-coverage denominator, lowering confidence. Product copy MUST describe this as **uncredited because effort is unknown**, not as proof that the set was easy or non-productive. Do not impute partial credit from missing effort.
 
 The displayed comparison is:
 
@@ -217,14 +219,14 @@ Readiness is a deterministic decay of logged muscle exposure, not a physiologica
 
 | Set observation | Stimulus |
 | --- | ---: |
-| Failure or RPE 10 | 1.00 |
-| RPE 9 | 0.90 |
-| RPE 8 | 0.75 |
-| RPE 7 | 0.55 |
-| RPE 1–6 | 0.35 |
+| RPE 10 | 1.00 |
+| RPE 9–9.5 | 0.90 |
+| RPE 8–8.5 | 0.75 |
+| RPE 7–7.5 | 0.55 |
+| RPE 6 | 0.35 |
 | Missing RPE | 0.65 |
 
-Each set stimulus is multiplied by the saved muscle-contribution fraction. For each workout and muscle:
+Each non-warmup set stimulus is multiplied by the saved muscle-contribution fraction. For each workout and muscle:
 
 ```text
 workout_muscle_exposure =
@@ -284,11 +286,12 @@ rpe_change =
   mean(recent exposure RPE) − mean(baseline exposure RPE)
   when both windows contain RPE, otherwise 0
 
-failure_rate_change =
-  mean(recent failure rate) − mean(baseline failure rate)
+max_effort_rate_change =
+  mean(recent fraction of sets at RPE 10)
+    − mean(baseline fraction of sets at RPE 10)
 ```
 
-An exercise qualifies as a suppression candidate only when `performance_change_percent ≤ −3` and either `rpe_change ≥ 0.5` or `failure_rate_change ≥ 0.15`. The dashboard shows **Consider an easier session** when the mean reduction among qualifying exercises is at least `5%` or at least two exercises qualify; otherwise it shows **Performance watch**.
+An exercise qualifies as a suppression candidate only when `performance_change_percent ≤ −3` and either `rpe_change ≥ 0.5` or `max_effort_rate_change ≥ 0.15`. The dashboard shows **Consider an easier session** when the mean reduction among qualifying exercises is at least `5%` or at least two exercises qualify; otherwise it shows **Performance watch**.
 
 Signal confidence is low until any exercise has six valid exposures, moderate when same-ID history exists without a qualifying signal or exactly one exercise qualifies, and high when at least two exercises qualify. This confidence still does not verify protocol comparability.
 
@@ -316,7 +319,7 @@ The shared rule used for exercise-strength profiles, muscle dose, and systemic l
 
 Muscle readiness uses a separate rule: fewer than three completed sessions is low; at least six completed sessions with at least 75% completed-set RPE coverage is high; every other case is moderate.
 
-Muscle-dose coverage is contribution-weighted and treats non-null set RPE or a failure flag as known effort. Systemic-load coverage is the fraction of completed sessions with recorded or estimated workout effort; estimated-session counts remain visible because mean set RPE is not interchangeable with session RPE. The implementation does not inspect protocol, technique, or provenance changes; those remain user interpretation requirements and can invalidate an otherwise high-confidence same-ID trend.
+Muscle-dose coverage is contribution-weighted and treats non-null working-set RPE as known effort. Systemic-load coverage is the fraction of completed sessions with recorded or estimated workout effort; estimated-session counts remain visible because mean set RPE is not interchangeable with session RPE. The implementation does not inspect protocol, technique, or provenance changes; those remain user interpretation requirements and can invalidate an otherwise high-confidence same-ID trend.
 
 Muscle-dose confidence has an additional implementation detail: when a muscle has any recent-window coverage record, that coverage replaces rather than combines with baseline-window coverage; baseline coverage is used only when recent coverage is absent. The sample count passed to the shared confidence rule is `round(Σ muscle_contribution_fraction)`, not the number of physical sets. For example, six fully known sets credited at `0.25` each produce a weighted sample count of `round(1.5) = 2`.
 

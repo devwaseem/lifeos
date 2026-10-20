@@ -1,14 +1,17 @@
 import { parseSetDistanceMeters, parseSetDurationSeconds } from '$lib/exercise-tracking'
+import { isValidRpe } from '$lib/rpe'
 import type { WorkoutExercise, WorkoutSession, WorkoutSet } from '$lib/types'
 import { normalizeProgressionRule } from '$lib/progression'
 import { resolveSecondaryMuscles } from '$lib/muscle-contributions'
 
 export const DEFAULT_REST_SECONDS = 120
 
-function normalizeSet(set: WorkoutSet): WorkoutSet {
+function normalizeSet(set: WorkoutSet & { failure?: unknown }): WorkoutSet {
+  const { failure: legacyFailure, ...current } = set
+  const warmup = set.warmup === true
   return {
-    ...set,
-    rpe: typeof set.rpe === 'number' && set.rpe >= 1 && set.rpe <= 10 ? set.rpe : null,
+    ...current,
+    rpe: warmup ? null : legacyFailure === true ? 10 : isValidRpe(set.rpe) ? set.rpe : null,
     durationSeconds: typeof set.durationSeconds === 'number' && set.durationSeconds >= 0
       ? set.durationSeconds
       : parseSetDurationSeconds(typeof set.notes === 'string' ? set.notes : ''),
@@ -16,7 +19,7 @@ function normalizeSet(set: WorkoutSet): WorkoutSet {
       ? set.distanceMeters
       : parseSetDistanceMeters(typeof set.notes === 'string' ? set.notes : ''),
     completedAt: typeof set.completedAt === 'string' ? set.completedAt : null,
-    failure: typeof set.failure === 'boolean' ? set.failure : false,
+    warmup,
     notes: typeof set.notes === 'string' ? set.notes : '',
   }
 }
@@ -41,9 +44,7 @@ export function normalizeWorkout(workout: WorkoutSession): WorkoutSession {
     routineId: typeof workout.routineId === 'string' ? workout.routineId : null,
     cycleSlotId: typeof workout.cycleSlotId === 'string' ? workout.cycleSlotId : null,
     notes: typeof workout.notes === 'string' ? workout.notes : '',
-    sessionRpe: typeof workout.sessionRpe === 'number' && workout.sessionRpe >= 1 && workout.sessionRpe <= 10
-      ? workout.sessionRpe
-      : null,
+    sessionRpe: isValidRpe(workout.sessionRpe) ? workout.sessionRpe : null,
     exercises: workout.exercises.map(normalizeExercise),
   }
 }

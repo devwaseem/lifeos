@@ -81,7 +81,7 @@ function buildCalendarRange(
     const current = activity.get(key) ?? { workoutCount: 0, completedSets: 0, routineMarkers: new Map() }
     current.workoutCount += 1
     current.completedSets += workout.exercises.reduce(
-      (total, exercise) => total + exercise.sets.filter((set) => set.completed).length,
+      (total, exercise) => total + exercise.sets.filter((set) => set.completed && !set.warmup).length,
       0,
     )
     const routineKey = workout.routineId ?? 'one-off'

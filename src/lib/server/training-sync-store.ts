@@ -65,7 +65,7 @@ interface WorkoutSetRow {
   distance_meters: number | null
   completed: number
   completed_at: string | null
-  failure: number
+  warmup: number
   notes: string
 }
 
@@ -85,6 +85,7 @@ interface RoutineExerciseRow {
   notes: string
   rest_seconds: number
   set_count: number
+  has_warmup_set: number
   progression_min_reps: number
   progression_max_reps: number
   progression_weight_increment: number | null
@@ -256,7 +257,7 @@ async function storeWorkout(database: D1Database, workout: WorkoutSession) {
   ])), condition, conditionValues))
   statements.push(...conditionalInsertStatements(database, 'workout_sets', [
     'id', 'workout_exercise_id', 'position', 'weight', 'repetitions', 'rpe', 'duration_seconds',
-    'distance_meters', 'completed', 'completed_at', 'failure', 'notes',
+    'distance_meters', 'completed', 'completed_at', 'warmup', 'notes',
   ], workout.exercises.flatMap((exercise) => exercise.sets.map((workoutSet, position) => [
     workoutSet.id,
     exercise.id,
@@ -268,7 +269,7 @@ async function storeWorkout(database: D1Database, workout: WorkoutSession) {
     workoutSet.distanceMeters,
     workoutSet.completed ? 1 : 0,
     workoutSet.completedAt,
-    workoutSet.failure ? 1 : 0,
+    workoutSet.warmup ? 1 : 0,
     workoutSet.notes,
   ])), condition, conditionValues))
   statements.push(changeStatement(database, 'workout', workout.id, 'workouts', token))
@@ -296,7 +297,7 @@ async function storeRoutine(database: D1Database, routine: RoutineTemplate) {
   `).bind(routine.id, ...conditionValues))
   statements.push(...conditionalInsertStatements(database, 'routine_exercises', [
     'id', 'routine_id', 'position', 'exercise_id', 'name', 'primary_muscle', 'equipment', 'notes',
-    'rest_seconds', 'set_count', 'progression_min_reps', 'progression_max_reps',
+    'rest_seconds', 'set_count', 'has_warmup_set', 'progression_min_reps', 'progression_max_reps',
     'progression_weight_increment', 'progression_max_rpe',
   ], routine.exercises.map((exercise, position) => [
     exercise.id,
@@ -309,6 +310,7 @@ async function storeRoutine(database: D1Database, routine: RoutineTemplate) {
     exercise.notes,
     exercise.restSeconds,
     exercise.setCount,
+    exercise.hasWarmupSet ? 1 : 0,
     exercise.progression.minReps,
     exercise.progression.maxReps,
     exercise.progression.weightIncrement,
@@ -422,7 +424,7 @@ async function loadWorkouts(database: D1Database, cursor: number | null, upperRe
     SELECT exercise.workout_id, workout_set.workout_exercise_id, workout_set.id,
       workout_set.weight, workout_set.repetitions, workout_set.rpe, workout_set.duration_seconds,
       workout_set.distance_meters, workout_set.completed, workout_set.completed_at,
-      workout_set.failure, workout_set.notes
+      workout_set.warmup, workout_set.notes
     FROM workout_sets workout_set
     JOIN workout_exercises exercise ON exercise.id = workout_set.workout_exercise_id
     WHERE exercise.workout_id IN (${placeholders})
@@ -463,7 +465,7 @@ async function loadWorkouts(database: D1Database, cursor: number | null, upperRe
         distanceMeters: workoutSet.distance_meters,
         completed: workoutSet.completed === 1,
         completedAt: workoutSet.completed_at,
-        failure: workoutSet.failure === 1,
+        warmup: workoutSet.warmup === 1,
         notes: workoutSet.notes,
       })),
     })),
@@ -477,7 +479,7 @@ async function loadRoutines(database: D1Database, cursor: number | null, upperRe
   const routineIds = routines.map((routine) => routine.id)
   const exercises = await rowsForParents<RoutineExerciseRow>(database, routineIds, (placeholders) => `
     SELECT id, routine_id, exercise_id, name, primary_muscle, equipment, notes, rest_seconds,
-      set_count, progression_min_reps, progression_max_reps, progression_weight_increment,
+      set_count, has_warmup_set, progression_min_reps, progression_max_reps, progression_weight_increment,
       progression_max_rpe
     FROM routine_exercises
     WHERE routine_id IN (${placeholders})
@@ -509,6 +511,7 @@ async function loadRoutines(database: D1Database, cursor: number | null, upperRe
       secondaryMuscles: secondaryMuscles(musclesByExercise.get(exercise.id)),
       restSeconds: exercise.rest_seconds,
       setCount: exercise.set_count,
+      hasWarmupSet: exercise.has_warmup_set === 1,
       progression: progression(exercise),
     })),
   }))

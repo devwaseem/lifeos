@@ -38,7 +38,7 @@ const workout: WorkoutSession = {
       distanceMeters: null,
       completed: true,
       completedAt: '2026-10-19T08:30:00.000Z',
-      failure: false,
+      warmup: false,
       notes: 'Clean rep',
     }],
   }],
@@ -60,6 +60,7 @@ const routine: RoutineTemplate = {
     notes: 'Controlled eccentric',
     restSeconds: 120,
     setCount: 3,
+    hasWarmupSet: false,
     progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, maxRpe: 9 },
   }],
 }
@@ -88,10 +89,15 @@ describe('normalized D1 migration', () => {
       .run(cycle.id, cycle.updatedAt, JSON.stringify(cycle))
 
     database.exec(migration('0004_normalized_training.sql'))
+    database.exec('UPDATE workout_sets SET failure = 1')
+    database.exec(migration('0005_warmup_rpe.sql'))
 
     const workoutColumns = database.prepare('PRAGMA table_info(workouts)').all().map((column) => column.name)
+    const workoutSetColumns = database.prepare('PRAGMA table_info(workout_sets)').all().map((column) => column.name)
     expect(workoutColumns).toContain('completed_at')
     expect(workoutColumns).not.toContain('payload')
+    expect(workoutSetColumns).toContain('warmup')
+    expect(workoutSetColumns).not.toContain('failure')
     expect(database.prepare(`
       SELECT
         w.title,
@@ -110,10 +116,10 @@ describe('normalized D1 migration', () => {
       primary_muscle: 'Quadriceps',
       weight: 100,
       repetitions: 8,
-      rpe: 9,
+      rpe: 10,
     })
     expect(database.prepare('SELECT muscle, fraction FROM workout_exercise_secondary_muscles').get()).toEqual({ muscle: 'Glutes', fraction: 0.5 })
-    expect(database.prepare('SELECT exercise_id, set_count FROM routine_exercises').get()).toEqual({ exercise_id: 'barbell-squat', set_count: 3 })
+    expect(database.prepare('SELECT exercise_id, set_count, has_warmup_set FROM routine_exercises').get()).toEqual({ exercise_id: 'barbell-squat', set_count: 3, has_warmup_set: 0 })
     expect(database.prepare('SELECT type, routine_id FROM training_cycle_slots').get()).toEqual({ type: 'routine', routine_id: 'routine-1' })
     expect(database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'workouts_status_completed_at_idx'").get()).toEqual({ name: 'workouts_status_completed_at_idx' })
 

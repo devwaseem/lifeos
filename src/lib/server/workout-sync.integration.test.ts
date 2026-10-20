@@ -47,7 +47,7 @@ function d1Database(database: DatabaseSync) {
 }
 
 function applyMigrations(database: DatabaseSync) {
-  for (const name of ['0001_workouts.sql', '0002_routines.sql', '0003_training_cycle.sql', '0004_normalized_training.sql']) {
+  for (const name of ['0001_workouts.sql', '0002_routines.sql', '0003_training_cycle.sql', '0004_normalized_training.sql', '0005_warmup_rpe.sql']) {
     database.exec(readFileSync(new URL(`../../../migrations/${name}`, import.meta.url), 'utf8'))
   }
 }
@@ -83,7 +83,7 @@ const workout: WorkoutSession = {
       distanceMeters: null,
       completed: true,
       completedAt: '2026-10-19T08:30:00.000Z',
-      failure: false,
+      warmup: false,
       notes: '',
     }],
   }, {
@@ -106,7 +106,7 @@ const workout: WorkoutSession = {
       distanceMeters: 500,
       completed: true,
       completedAt: '2026-10-19T08:05:00.000Z',
-      failure: false,
+      warmup: true,
       notes: 'Warm-up',
     }],
   }],
@@ -128,6 +128,7 @@ const routine: RoutineTemplate = {
     secondaryMuscles: [{ muscle: 'Triceps', fraction: 0.5 }],
     restSeconds: 120,
     setCount: 3,
+    hasWarmupSet: true,
     progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, maxRpe: 10 },
   }],
 }

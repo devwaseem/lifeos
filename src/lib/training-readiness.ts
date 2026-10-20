@@ -93,7 +93,7 @@ function completedWorkouts(workouts: WorkoutSession[]) {
 }
 
 function setTonnage(set: WorkoutSet) {
-  if (!set.completed || set.weight === null || set.reps === null) return 0
+  if (set.warmup || !set.completed || set.weight === null || set.reps === null) return 0
   return Math.max(0, set.weight) * Math.max(0, set.reps)
 }
 
@@ -138,12 +138,12 @@ function getTargetedWorkload(workouts: WorkoutSession[], targetMuscles: string[]
 }
 
 function setStimulus(set: WorkoutSet) {
-  if (!set.completed) return 0
-  if (set.failure || (set.rpe !== null && set.rpe >= 10)) return 1
+  if (set.warmup || !set.completed) return 0
+  if (set.rpe !== null && set.rpe >= 10) return 1
   if (set.rpe === null) return 0.65
   if (set.rpe <= 6) return 0.35
-  if (set.rpe === 7) return 0.55
-  if (set.rpe === 8) return 0.75
+  if (set.rpe <= 7.5) return 0.55
+  if (set.rpe <= 8.5) return 0.75
   return 0.9
 }
 
@@ -157,7 +157,7 @@ function collectMuscleExposures(workouts: WorkoutSession[], now: number) {
       for (const contribution of getMuscleContributions(exercise)) {
         const current = sessionMuscles.get(contribution.muscle) ?? { stimulus: 0, latest: null }
         for (const set of exercise.sets) {
-          if (!set.completed) continue
+          if (set.warmup || !set.completed) continue
           const iso = set.completedAt ?? fallback
           const value = new Date(iso).getTime()
           if (!Number.isFinite(value) || value > now) continue
@@ -236,7 +236,7 @@ function getMuscleRecovery(workouts: WorkoutSession[], now: number) {
 
 function getRecoveryConfidence(workouts: WorkoutSession[]): RecoveryConfidence {
   const completed = completedWorkouts(workouts)
-  const sets = completed.flatMap((workout) => workout.exercises.flatMap((exercise) => exercise.sets.filter((set) => set.completed)))
+  const sets = completed.flatMap((workout) => workout.exercises.flatMap((exercise) => exercise.sets.filter((set) => set.completed && !set.warmup)))
   const rpeCoverage = sets.length > 0 ? sets.filter((set) => set.rpe !== null).length / sets.length : 0
 
   if (completed.length < 3) {

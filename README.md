@@ -4,8 +4,8 @@ LifeOS Training is an offline-first workout journal for planning routines, recor
 
 ## Features
 
-- Active workout tracking with persistent timers, rest intervals, set notes, failure state, and RPE
-- Reusable routines with ordered exercises, default sets, coaching notes, and progression rules
+- Active workout tracking with persistent timers, rest intervals, set notes, and a described RPE 6–10 scale
+- Reusable routines with ordered exercises, optional warmup sets, working-set defaults, coaching notes, and progression rules
 - Completion-driven training cycles with routine and recovery slots
 - Exercise history, personal records, progress charts, and calendar views
 - Muscle-readiness and workload estimates derived from recorded training data

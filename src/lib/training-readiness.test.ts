@@ -14,6 +14,7 @@ function routineExercise(overrides: Partial<RoutineExercise>): RoutineExercise {
     secondaryMuscles: [],
     restSeconds: 120,
     setCount: 1,
+    hasWarmupSet: false,
     progression: { minReps: 8, maxReps: 12, weightIncrement: null, maxRpe: 10 },
     ...overrides,
   }
@@ -87,7 +88,7 @@ function completedSet(id: string): WorkoutSet {
     distanceMeters: null,
     completed: true,
     completedAt: '2026-10-19T09:00:00.000Z',
-    failure: true,
+    warmup: false,
     notes: '',
   }
 }

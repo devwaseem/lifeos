@@ -1,6 +1,6 @@
 import { getExerciseTrackingMode } from '$lib/exercise-tracking'
 import type { ExerciseDefinition, ProgressionRule, WorkoutExercise, WorkoutSession, WorkoutSet } from '$lib/types'
-import { getNextSetAutoregulation, type AutoregulationRecommendation } from '$lib/training-science'
+import { getMatchingPreviousSet, getPreviousWorkoutExercise } from '$lib/workout-sets'
 
 export type ProgressionAction = 'add-rep' | 'increase-load' | 'repeat' | 'baseline'
 
@@ -10,12 +10,38 @@ export interface SetProgressionTarget {
   previousWeight: number | null
   previousReps: number | null
   previousRpe: number | null
-  previousFailure: boolean
   targetWeight: number | null
   targetReps: number | null
   action: ProgressionAction
   rule: ProgressionRule
-  autoregulation?: AutoregulationRecommendation
+}
+
+export type SetProgressionOutcome = 'progressed' | 'maintained' | 'below-previous' | 'baseline'
+
+export function getSetProgressionOutcome(set: WorkoutSet, target: SetProgressionTarget): SetProgressionOutcome | null {
+  if (!set.completed || set.warmup) return null
+  if (set.reps === null || target.previousReps === null) return 'baseline'
+
+  const currentWeight = set.weight ?? 0
+  const previousWeight = target.previousWeight ?? 0
+  const currentIsWeighted = currentWeight > 0
+  const previousIsWeighted = previousWeight > 0
+  if (currentIsWeighted !== previousIsWeighted) return 'baseline'
+
+  const currentPerformance = currentIsWeighted
+    ? currentWeight * (1 + set.reps / 30)
+    : set.reps
+  const previousPerformance = previousIsWeighted
+    ? previousWeight * (1 + target.previousReps / 30)
+    : target.previousReps
+
+  if (currentPerformance > previousPerformance) return 'progressed'
+  if (currentPerformance < previousPerformance) return 'below-previous'
+  if (set.rpe !== null && target.previousRpe !== null) {
+    if (set.rpe < target.previousRpe) return 'progressed'
+    if (set.rpe > target.previousRpe) return 'below-previous'
+  }
+  return 'maintained'
 }
 
 export function getEquipmentWeightIncrement(equipment: string) {
@@ -60,7 +86,6 @@ function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSe
       previousWeight: null,
       previousReps: null,
       previousRpe: null,
-      previousFailure: false,
       targetWeight: null,
       targetReps: null,
       action: 'baseline',
@@ -70,8 +95,12 @@ function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSe
 
   const previousWeight = previous.weight
   const reachedCeiling = previous.reps >= rule.maxReps
-  const effortAllowsProgression = !previous.failure && (previous.rpe === null || previous.rpe <= rule.maxRpe)
-  const canIncreaseLoad = reachedCeiling && effortAllowsProgression && previousWeight !== null && rule.weightIncrement !== null
+  const effortAllowsProgression = previous.rpe === null
+    || (previous.rpe < 10 && previous.rpe <= rule.maxRpe)
+  const canIncreaseLoad = reachedCeiling
+    && effortAllowsProgression
+    && previousWeight !== null
+    && rule.weightIncrement !== null
 
   if (canIncreaseLoad) {
     return {
@@ -80,7 +109,6 @@ function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSe
       previousWeight,
       previousReps: previous.reps,
       previousRpe: previous.rpe,
-      previousFailure: previous.failure,
       targetWeight: Math.round((previousWeight + (rule.weightIncrement ?? 0)) * 100) / 100,
       targetReps: rule.minReps,
       action: 'increase-load',
@@ -95,7 +123,6 @@ function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSe
     previousWeight,
     previousReps: previous.reps,
     previousRpe: previous.rpe,
-    previousFailure: previous.failure,
     targetWeight: previousWeight,
     targetReps: canAddRep ? Math.min(rule.maxReps, previous.reps + 1) : previous.reps,
     action: canAddRep ? 'add-rep' : 'repeat',
@@ -104,35 +131,26 @@ function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSe
 }
 
 export function buildSetProgressionTargets(currentWorkout: WorkoutSession, workouts: WorkoutSession[]) {
-  const history = workouts
-    .filter((workout) => workout.status === 'completed' && workout.id !== currentWorkout.id)
-    .sort((a, b) => (b.completedAt ?? b.startedAt).localeCompare(a.completedAt ?? a.startedAt))
   const targets = new Map<string, SetProgressionTarget>()
 
   for (const exercise of currentWorkout.exercises) {
     if (!supportsProgression(exercise)) continue
-    const previousExercise = history
-      .map((workout) => workout.exercises.find((candidate) => candidate.exerciseId === exercise.exerciseId))
-      .find((candidate) => candidate?.sets.some((set) => set.completed && set.reps !== null))
+    const previousExercise = getPreviousWorkoutExercise(workouts, exercise.exerciseId)
+    let workingSetIndex = 0
 
-    exercise.sets.forEach((set, index) => {
-      const historical = targetFromPrevious(set.id, index, previousExercise?.sets[index], exercise)
-      const autoregulation = getNextSetAutoregulation(exercise, index, workouts, {
-        weight: historical.targetWeight,
-        reps: historical.targetReps,
-      })
-      const livePrevious = exercise.sets.slice(0, index).filter((candidate) => candidate.completed).at(-1)
-      targets.set(set.id, {
-        ...historical,
-        previousWeight: autoregulation.source === 'live' ? livePrevious?.weight ?? null : historical.previousWeight,
-        previousReps: autoregulation.source === 'live' ? livePrevious?.reps ?? null : historical.previousReps,
-        previousRpe: autoregulation.source === 'live' ? livePrevious?.rpe ?? null : historical.previousRpe,
-        previousFailure: autoregulation.source === 'live' ? livePrevious?.failure ?? false : historical.previousFailure,
-        targetWeight: autoregulation.weight,
-        targetReps: autoregulation.reps,
-        autoregulation,
-      })
-    })
+    for (const set of exercise.sets) {
+      if (set.warmup) continue
+      targets.set(
+        set.id,
+        targetFromPrevious(
+          set.id,
+          workingSetIndex,
+          getMatchingPreviousSet(previousExercise, false, workingSetIndex),
+          exercise,
+        ),
+      )
+      workingSetIndex += 1
+    }
   }
 
   return targets

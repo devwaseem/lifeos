@@ -13,6 +13,7 @@
   import { getExerciseStrengthProfile, getFatigueSignal } from '$lib/training-science'
   import type { ExerciseVideo, WorkoutSession } from '$lib/types'
   import { formatShortDate, formatVolume } from '$lib/utils'
+  import { getWorkingSetNumber } from '$lib/workout-sets'
   import DottedAreaChart from './DottedAreaChart.svelte'
   import ExerciseVideos from './ExerciseVideos.svelte'
   import ReadOnlyWorkoutSetHeader from './ReadOnlyWorkoutSetHeader.svelte'
@@ -40,9 +41,9 @@
   $: history = getExerciseHistory(workouts, exerciseId)
   $: visibleHistory = history.slice(0, visibleHistoryCount)
   $: remainingHistoryCount = Math.max(0, history.length - visibleHistory.length)
-  $: completedHistorySets = history.reduce((total, entry) => total + entry.sets.length, 0)
+  $: completedHistorySets = history.reduce((total, entry) => total + entry.sets.filter((set) => !set.warmup).length, 0)
   $: trackingMode = getExerciseTrackingMode(history[0]?.exercise ?? { name: exerciseName, muscle: '' })
-  $: timedSets = history.flatMap((entry) => entry.sets)
+  $: timedSets = history.flatMap((entry) => entry.sets.filter((set) => !set.warmup))
   $: totalTrackedDuration = timedSets.reduce((total, set) => total + (set.durationSeconds ?? 0), 0)
   $: longestTrackedDuration = timedSets.reduce((longest, set) => Math.max(longest, set.durationSeconds ?? 0), 0)
   $: totalTrackedDistance = timedSets.reduce((total, set) => total + (set.distanceMeters ?? 0), 0)
@@ -152,13 +153,14 @@
       {#if history.length > 0}
         <div class="divide-y divide-rule overflow-hidden rounded-2xl bg-paper">
           {#each visibleHistory as entry}
-            <article class="px-4 py-5 sm:px-5" aria-label={`${entry.workout.title}, ${entry.sets.length} completed ${entry.sets.length === 1 ? 'set' : 'sets'}`}>
+            {@const workingSetCount = entry.sets.filter((set) => !set.warmup).length}
+            <article class="px-4 py-5 sm:px-5" aria-label={`${entry.workout.title}, ${workingSetCount} completed working ${workingSetCount === 1 ? 'set' : 'sets'}`}>
               <header class="flex items-start justify-between gap-4">
                 <div class="min-w-0">
                   <p class="font-dot text-xs text-accent">{formatShortDate(entry.workout.completedAt ?? entry.workout.startedAt)}</p>
                   <h3 class="mt-1 truncate text-lg font-medium">{entry.workout.title}</h3>
                 </div>
-                <span class="shrink-0 rounded-full bg-canvas px-2.5 py-1 text-[0.625rem] font-medium uppercase text-muted">{entry.sets.length} {entry.sets.length === 1 ? 'set' : 'sets'}</span>
+                <span class="shrink-0 rounded-full bg-canvas px-2.5 py-1 text-[0.625rem] font-medium uppercase text-muted">{workingSetCount} working {workingSetCount === 1 ? 'set' : 'sets'}</span>
               </header>
 
               {#if entry.exercise.notes}
@@ -169,7 +171,8 @@
                 <ReadOnlyWorkoutSetHeader {trackingMode} />
                 <div class="space-y-1">
                   {#each entry.sets as set, setIndex (set.id)}
-                    <ReadOnlyWorkoutSetRow {set} {setIndex} {exerciseName} {trackingMode} />
+                    {@const setNumber = getWorkingSetNumber(entry.sets, setIndex)}
+                    <ReadOnlyWorkoutSetRow {set} {setIndex} {setNumber} {exerciseName} {trackingMode} />
                   {/each}
                 </div>
               </div>

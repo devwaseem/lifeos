@@ -30,7 +30,7 @@ WHERE EXISTS (SELECT 1 FROM workouts WHERE id = 'server-demo-full-body');
 
 WITH seed (
   id, workout_exercise_id, position, weight, repetitions, rpe, duration_seconds,
-  distance_meters, completed, completed_at, failure, notes
+  distance_meters, completed, completed_at, warmup, notes
 ) AS (VALUES
   ('server-demo-deadlift-1', 'server-demo-deadlift', 0, 120, 5, 8, NULL, NULL, 1, '2026-10-17T07:20:00.000Z', 0, ''),
   ('server-demo-deadlift-2', 'server-demo-deadlift', 1, 120, 5, 9, NULL, NULL, 1, '2026-10-17T07:25:00.000Z', 0, ''),

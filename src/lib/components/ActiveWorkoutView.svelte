@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ArrowDown, ArrowLeft, ArrowUp, Bell, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Gauge, Medal, Plus, Repeat2, Route, Trash2, Weight, XCircle } from '@lucide/svelte'
   import { flip } from 'svelte/animate'
-  import { onDestroy, tick } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import { fade, fly } from 'svelte/transition'
   import { getWorkoutPersonalRecords } from '$lib/personal-records'
   import { getExerciseTrackingMode } from '$lib/exercise-tracking'
@@ -11,9 +11,11 @@
   import type { ExerciseDefinition, RoutineTemplate, WorkoutExercise, WorkoutFinishDecision, WorkoutSession, WorkoutSet } from '$lib/types'
   import { DEFAULT_REST_SECONDS } from '$lib/workouts'
   import { formatCountdown, formatElapsed, formatVolume, getCompletedSetCount, getLiveWorkoutVolume, getWorkoutSetCount, newId } from '$lib/utils'
+  import { countWorkingSets, createWorkoutSet, getLastWorkingSet, getMatchingPreviousSet, getPreviousWorkoutExercise, getWorkingSetNumber } from '$lib/workout-sets'
   import ConfirmDialog from './ConfirmDialog.svelte'
   import FinishWorkoutDialog from './FinishWorkoutDialog.svelte'
   import ExercisePicker from './ExercisePicker.svelte'
+  import MaxEffortMoment from './MaxEffortMoment.svelte'
   import WorkoutSetRow from './WorkoutSetRow.svelte'
 
   export let workout: WorkoutSession
@@ -35,8 +37,22 @@
   let expandedSetId: string | null = null
   let finishMode: 'routine' | 'changed' | 'one-off' = 'one-off'
   let pendingDelete: { title: string; description: string; action: () => void } | null = null
+  let maxEffortMoment: { id: number; exerciseName: string } | null = null
+  let maxEffortSequence = 0
   const timer = setInterval(() => { now = Date.now() }, 1_000)
   onDestroy(() => clearInterval(timer))
+
+  onMount(() => {
+    let savedScrollY = 0
+    try {
+      const storedScrollY = Number(sessionStorage.getItem(`lifeos-workout-scroll:${workout.id}`))
+      savedScrollY = Number.isFinite(storedScrollY) && storedScrollY > 0 ? storedScrollY : 0
+    } catch {
+      savedScrollY = 0
+    }
+    const restoreFrame = window.requestAnimationFrame(() => window.scrollTo(0, savedScrollY))
+    return () => window.cancelAnimationFrame(restoreFrame)
+  })
 
   function changeWorkout(changes: Partial<WorkoutSession>) {
     onChange({ ...workout, ...changes, updatedAt: new Date().toISOString() })
@@ -58,7 +74,11 @@
       restSeconds: DEFAULT_REST_SECONDS,
       restUntil: null,
       progression: defaultProgressionRule(definition.equipment),
-      sets: [{ id: newId(), weight: null, reps: null, rpe: null, durationSeconds: null, distanceMeters: null, completed: false, completedAt: null, failure: false, notes: '' }],
+      sets: [createWorkoutSet(false, getMatchingPreviousSet(
+        getPreviousWorkoutExercise(workouts, definition.id),
+        false,
+        0,
+      ))],
     }
     changeWorkout({ exercises: [...workout.exercises, exercise] })
   }
@@ -66,25 +86,22 @@
   function addSet(exerciseId: string) {
     const exercise = workout.exercises.find((item) => item.id === exerciseId)
     if (!exercise) return
-    const previous = exercise.sets.at(-1)
-    const nextSet: WorkoutSet = {
-      id: newId(),
-      weight: previous?.weight ?? null,
-      reps: previous?.reps ?? null,
-      rpe: null,
-      durationSeconds: previous?.durationSeconds ?? null,
-      distanceMeters: previous?.distanceMeters ?? null,
-      completed: false,
-      completedAt: null,
-      failure: false,
-      notes: '',
-    }
-    expandedSetId = nextSet.id
+    const workingSetIndex = countWorkingSets(exercise.sets)
+    const previousExercise = getPreviousWorkoutExercise(workouts, exercise.exerciseId)
+    const historicalSet = getMatchingPreviousSet(previousExercise, false, workingSetIndex)
+    const nextSet: WorkoutSet = createWorkoutSet(false, historicalSet ?? getLastWorkingSet(exercise.sets))
+    const scrollY = window.scrollY
     updateExercise(exerciseId, (item) => ({ ...item, sets: [...item.sets, nextSet] }))
+    void tick().then(() => window.scrollTo(0, scrollY))
   }
 
   function setExpanded(setId: string, expanded: boolean) {
     expandedSetId = expanded ? setId : expandedSetId === setId ? null : expandedSetId
+  }
+
+  function showMaxEffortMoment(exerciseName: string) {
+    maxEffortSequence += 1
+    maxEffortMoment = { id: maxEffortSequence, exerciseName }
   }
 
   function moveExercise(exerciseId: string, direction: -1 | 1) {
@@ -258,17 +275,24 @@
                   </div>
                   <div class="space-y-1">
                     {#each exercise.sets as set, setIndex (set.id)}
+                      {@const setNumber = getWorkingSetNumber(exercise.sets, setIndex)}
                       <WorkoutSetRow
                         {set}
                         progressionTarget={progressionTargets.get(set.id)}
                         {setIndex}
+                        {setNumber}
                         {trackingMode}
                         exerciseName={exercise.name}
                         expanded={expandedSetId === set.id}
                         onExpandedChange={(expanded) => setExpanded(set.id, expanded)}
-                        onChange={(changes) => updateExercise(exercise.id, (item) => ({ ...item, sets: item.sets.map((candidate) => candidate.id === set.id ? { ...candidate, ...changes } : candidate) }))}
+                        onChange={(changes) => updateExercise(exercise.id, (item) => ({ ...item, sets: item.sets.map((candidate) => {
+                          if (candidate.id !== set.id) return candidate
+                          const updated = { ...candidate, ...changes }
+                          return updated.warmup ? { ...updated, rpe: null } : updated
+                        }) }))}
                         onToggle={() => { toggleSet(exercise.id, set.id); expandedSetId = null }}
-                        onDelete={() => askToDelete(`Remove set ${setIndex + 1}?`, 'This set will be removed from the active workout.', () => { if (expandedSetId === set.id) expandedSetId = null; updateExercise(exercise.id, (item) => ({ ...item, sets: item.sets.filter((candidate) => candidate.id !== set.id) })) })}
+                        onMaxEffortComplete={() => showMaxEffortMoment(exercise.name)}
+                        onDelete={() => askToDelete(set.warmup ? 'Remove warmup set?' : `Remove set ${setNumber}?`, 'This set will be removed from the active workout.', () => { if (expandedSetId === set.id) expandedSetId = null; updateExercise(exercise.id, (item) => ({ ...item, sets: item.sets.filter((candidate) => candidate.id !== set.id) })) })}
                       />
                     {/each}
                   </div>
@@ -283,6 +307,12 @@
 
   </main>
 </div>
+
+{#if maxEffortMoment}
+  {#key maxEffortMoment.id}
+    <MaxEffortMoment exerciseName={maxEffortMoment.exerciseName} onComplete={() => { maxEffortMoment = null }} />
+  {/key}
+{/if}
 
 <FinishWorkoutDialog bind:this={finishDialog} mode={finishMode} routineName={sourceRoutine?.name ?? ''} suggestedRoutineName={`${workout.title} routine`} description={finishDescription} initialNotes={workout.notes} highlights={finishHighlights} {strengthHighlights} onConfirm={onFinish} />
 <ConfirmDialog bind:this={cancelDialog} eyebrow="Discard session" title="Cancel this workout?" description="The active session and its set data will be discarded. This cannot be undone." confirmLabel="Cancel workout" onConfirm={onCancel} />

@@ -9,7 +9,7 @@ export interface WorkoutSet {
   distanceMeters: number | null
   completed: boolean
   completedAt: string | null
-  failure: boolean
+  warmup: boolean
   notes: string
 }
 
@@ -49,6 +49,7 @@ export interface RoutineExercise {
   secondaryMuscles: MuscleContribution[]
   restSeconds: number
   setCount: number
+  hasWarmupSet: boolean
   progression: ProgressionRule
 }
 

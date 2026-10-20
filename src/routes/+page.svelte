@@ -157,7 +157,17 @@
     window.requestAnimationFrame(() => window.scrollTo(0, 0))
   }
 
+  function rememberActiveWorkoutScroll(nextView: AppView) {
+    if (view !== 'workout' || nextView === 'workout' || !activeWorkout) return
+    try {
+      sessionStorage.setItem(`lifeos-workout-scroll:${activeWorkout.id}`, String(window.scrollY))
+    } catch {
+      // Scroll restoration is an enhancement; navigation still works without session storage.
+    }
+  }
+
   function applyNavigationState(state: AppNavigationState, direction: -1 | 0 | 1) {
+    rememberActiveWorkoutScroll(state.view)
     pageDirection = direction
     selectedWorkoutId = state.selectedWorkoutId
     selectedExerciseId = state.selectedExerciseId
@@ -196,6 +206,7 @@
 
   function navigate(nextView: AppView, direction: -1 | 0 | 1 = getNavigationDirection(nextView)) {
     if (nextView === view) return
+    rememberActiveWorkoutScroll(nextView)
     pageDirection = direction
     view = nextView
     resetPageScroll()
@@ -480,7 +491,7 @@
 
   function startRoutine(routine: RoutineTemplate, cycleSlotId: string | null = null) {
     if (activeWorkout) { navigate('workout'); return }
-    const workout = createWorkoutFromRoutine(routine, new Date().toISOString(), cycleSlotId)
+    const workout = createWorkoutFromRoutine(routine, new Date().toISOString(), cycleSlotId, workouts)
     selectTodayRoutine(routine.id)
     workouts = [workout, ...workouts]
     saveWorkout(workout).catch(() => { dataError = 'This workout could not be saved locally.' })

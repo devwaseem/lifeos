@@ -342,7 +342,7 @@
             </article>
           {/each}
         </div>
-        <p class="mt-3 text-xs leading-5 text-muted">Observed hard sets use logged RPE or failure. Secondary muscles receive the exercise’s saved fractional contribution.</p>
+        <p class="mt-3 text-xs leading-5 text-muted">Observed hard sets use logged RPE 7–10. Warmup sets are excluded, and secondary muscles receive the exercise’s saved fractional contribution.</p>
       {:else}
         <p class="mt-5 text-sm text-muted">Log set RPE to calculate muscle-specific hard-set dose.</p>
       {/if}

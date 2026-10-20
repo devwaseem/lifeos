@@ -25,13 +25,13 @@ export function getWorkoutPersonalRecords(workout: WorkoutSession, workouts: Wor
 
   return workout.exercises.flatMap((exercise) => {
     const completedSets = exercise.sets.filter(
-      (set) => set.completed && set.weight !== null && set.reps !== null,
+      (set) => !set.warmup && set.completed && set.weight !== null && set.reps !== null,
     )
     if (completedSets.length === 0) return []
 
     const history = getExerciseHistory(historyWorkouts, exercise.exerciseId)
     const previous = getExerciseStats(history)
-    const previousBestReps = Math.max(0, ...history.flatMap((entry) => entry.sets.map((set) => set.reps ?? 0)))
+    const previousBestReps = Math.max(0, ...history.flatMap((entry) => entry.sets.filter((set) => !set.warmup).map((set) => set.reps ?? 0)))
     const weights = completedSets.map((set) => set.weight ?? 0)
     const reps = completedSets.map((set) => set.reps ?? 0)
     const volumes = completedSets.map((set, index) => weights[index] * reps[index])

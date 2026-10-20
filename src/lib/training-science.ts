@@ -1,5 +1,5 @@
 import { getMuscleContributions } from '$lib/muscle-contributions'
-import type { ProgressionRule, WorkoutExercise, WorkoutSession, WorkoutSet } from '$lib/types'
+import type { WorkoutExercise, WorkoutSession, WorkoutSet } from '$lib/types'
 
 const DAY_MS = 24 * 60 * 60 * 1_000
 
@@ -14,15 +14,6 @@ export interface StrengthProfile {
   confidence: EvidenceConfidence
 }
 
-export interface AutoregulationRecommendation {
-  weight: number | null
-  reps: number | null
-  targetRpe: number
-  source: 'history' | 'live'
-  confidence: EvidenceConfidence
-  reason: string
-  estimated1Rm: number | null
-}
 
 export interface MuscleDose {
   muscle: string
@@ -73,7 +64,7 @@ interface ExerciseExposure {
   timestamp: number
   estimated1Rm: number
   averageRpe: number | null
-  failureRate: number
+  maxEffortRate: number
 }
 
 function round(value: number, precision = 1) {
@@ -99,8 +90,8 @@ function confidenceFor(sampleCount: number, coverage: number): EvidenceConfidenc
 }
 
 export function estimateSetE1rm(set: WorkoutSet): number | null {
-  if (!set.completed || set.weight === null || set.weight <= 0 || set.reps === null || set.reps < 1 || set.reps > 15) return null
-  const observedRpe = set.failure ? 10 : set.rpe
+  if (set.warmup || !set.completed || set.weight === null || set.weight <= 0 || set.reps === null || set.reps < 1 || set.reps > 15) return null
+  const observedRpe = set.rpe
   if (observedRpe === null) return null
   const reserveReps = Math.min(5, Math.max(0, 10 - observedRpe))
   const repsAtFailure = Math.min(20, set.reps + reserveReps)
@@ -113,7 +104,7 @@ function collectExerciseExposures(exerciseId: string, workouts: WorkoutSession[]
     if (workout.status === 'cancelled') continue
     const exercise = workout.exercises.find((candidate) => candidate.exerciseId === exerciseId)
     if (!exercise) continue
-    const completed = exercise.sets.filter((set) => set.completed)
+    const completed = exercise.sets.filter((set) => set.completed && !set.warmup)
     const estimates = completed.map(estimateSetE1rm).filter((value): value is number => value !== null)
     if (estimates.length === 0) continue
     const rpes = completed.map((set) => set.rpe).filter((value): value is number => value !== null)
@@ -122,7 +113,7 @@ function collectExerciseExposures(exerciseId: string, workouts: WorkoutSession[]
       timestamp: new Date(workout.completedAt ?? workout.startedAt).getTime(),
       estimated1Rm: Math.max(...estimates),
       averageRpe: rpes.length > 0 ? mean(rpes) : null,
-      failureRate: completed.length > 0 ? completed.filter((set) => set.failure).length / completed.length : 0,
+      maxEffortRate: completed.length > 0 ? completed.filter((set) => set.rpe === 10).length / completed.length : 0,
     })
   }
   return exposures.filter((exposure) => Number.isFinite(exposure.timestamp)).sort((a, b) => b.timestamp - a.timestamp)
@@ -149,85 +140,10 @@ export function getExerciseStrengthProfile(exerciseId: string, workouts: Workout
   }
 }
 
-function roundToIncrement(value: number, increment: number | null) {
-  if (!increment || increment <= 0) return round(value, 1)
-  return round(Math.max(0, Math.round(value / increment) * increment), 2)
-}
-
-export function getNextSetAutoregulation(
-  exercise: WorkoutExercise,
-  setIndex: number,
-  workouts: WorkoutSession[],
-  fallback: { weight: number | null; reps: number | null },
-): AutoregulationRecommendation {
-  const rule: ProgressionRule = exercise.progression
-  const profile = getExerciseStrengthProfile(exercise.exerciseId, workouts)
-  const latest = exercise.sets.slice(0, setIndex).filter((set) => set.completed).at(-1)
-  if (!latest || latest.reps === null) {
-    return {
-      weight: fallback.weight,
-      reps: fallback.reps,
-      targetRpe: rule.maxRpe,
-      source: 'history',
-      confidence: profile.confidence,
-      reason: fallback.reps === null ? 'Complete a set to establish a live target.' : 'Based on the previous same-exercise session.',
-      estimated1Rm: profile.currentEstimated1Rm,
-    }
-  }
-
-  const estimated1Rm = estimateSetE1rm(latest)
-  if (latest.failure || (latest.rpe !== null && latest.rpe > rule.maxRpe)) {
-    const reducedWeight = latest.weight !== null && rule.weightIncrement
-      ? Math.max(0, latest.weight - rule.weightIncrement)
-      : latest.weight
-    return {
-      weight: reducedWeight,
-      reps: Math.min(rule.maxReps, Math.max(rule.minReps, latest.reps)),
-      targetRpe: rule.maxRpe,
-      source: 'live',
-      confidence: latest.rpe === null ? 'low' : profile.confidence,
-      reason: 'Effort exceeded the ceiling; reduce load for the next set.',
-      estimated1Rm,
-    }
-  }
-
-  if (latest.rpe === null || estimated1Rm === null) {
-    return {
-      weight: fallback.weight,
-      reps: fallback.reps,
-      targetRpe: rule.maxRpe,
-      source: 'live',
-      confidence: 'low',
-      reason: 'Log RPE to adjust the next set from observed effort.',
-      estimated1Rm,
-    }
-  }
-
-  const nextReps = latest.reps >= rule.maxReps ? rule.minReps : Math.min(rule.maxReps, latest.reps + 1)
-  const targetRepsAtFailure = nextReps + Math.max(0, 10 - rule.maxRpe)
-  const calculatedWeight = roundToIncrement(estimated1Rm / (1 + targetRepsAtFailure / 30), rule.weightIncrement)
-  const maximumIncrease = latest.weight !== null && rule.weightIncrement ? latest.weight + rule.weightIncrement : calculatedWeight
-  const targetWeight = latest.weight === null ? fallback.weight : Math.min(calculatedWeight, maximumIncrease)
-  const easyEnoughToAdvance = latest.rpe <= rule.maxRpe - 1
-
-  return {
-    weight: easyEnoughToAdvance ? targetWeight : latest.weight,
-    reps: easyEnoughToAdvance ? nextReps : latest.reps,
-    targetRpe: rule.maxRpe,
-    source: 'live',
-    confidence: profile.confidence,
-    reason: easyEnoughToAdvance
-      ? `Observed RPE ${latest.rpe}; advance while keeping effort at or below RPE ${rule.maxRpe}.`
-      : `Observed RPE ${latest.rpe}; repeat the prescription before progressing.`,
-    estimated1Rm,
-  }
-}
 
 function hardSetCredit(set: WorkoutSet) {
-  if (!set.completed) return 0
-  if (set.failure || (set.rpe !== null && set.rpe >= 7)) return 1
-  if (set.rpe === null) return 0
-  return 0
+  if (set.warmup || !set.completed) return 0
+  return set.rpe !== null && set.rpe >= 7 ? 1 : 0
 }
 
 function doseInRange(workouts: WorkoutSession[], start: number, end: number) {
@@ -238,7 +154,7 @@ function doseInRange(workouts: WorkoutSession[], start: number, end: number) {
     const fallback = new Date(workout.completedAt ?? workout.startedAt).getTime()
     for (const exercise of workout.exercises) {
       for (const set of exercise.sets) {
-        if (!set.completed) continue
+        if (set.warmup || !set.completed) continue
         const timestamp = new Date(set.completedAt ?? fallback).getTime()
         if (!Number.isFinite(timestamp) || timestamp < start || timestamp > end) continue
         const credit = hardSetCredit(set)
@@ -246,7 +162,7 @@ function doseInRange(workouts: WorkoutSession[], start: number, end: number) {
           dose.set(muscle.muscle, (dose.get(muscle.muscle) ?? 0) + credit * muscle.fraction)
           const coverage = rpeCoverage.get(muscle.muscle) ?? { known: 0, total: 0 }
           coverage.total += muscle.fraction
-          if (set.rpe !== null || set.failure) coverage.known += muscle.fraction
+          if (set.rpe !== null) coverage.known += muscle.fraction
           rpeCoverage.set(muscle.muscle, coverage)
         }
       }
@@ -376,8 +292,8 @@ export function getFatigueSignal(workouts: WorkoutSession[]): FatigueSignal {
     const recentRpes = recent.map((exposure) => exposure.averageRpe).filter((value): value is number => value !== null)
     const baselineRpes = baseline.map((exposure) => exposure.averageRpe).filter((value): value is number => value !== null)
     const rpe = recentRpes.length > 0 && baselineRpes.length > 0 ? mean(recentRpes) - mean(baselineRpes) : 0
-    const failureIncrease = mean(recent.map((exposure) => exposure.failureRate)) - mean(baseline.map((exposure) => exposure.failureRate))
-    if (performance <= -3 && (rpe >= 0.5 || failureIncrease >= 0.15)) {
+    const maxEffortIncrease = mean(recent.map((exposure) => exposure.maxEffortRate)) - mean(baseline.map((exposure) => exposure.maxEffortRate))
+    if (performance <= -3 && (rpe >= 0.5 || maxEffortIncrease >= 0.15)) {
       suppressed.push({ name: recent[0].name, performance, rpe })
     }
   }

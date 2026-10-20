@@ -4,6 +4,7 @@
   import { getExerciseTrackingMode } from '$lib/exercise-tracking'
   import type { WorkoutSession } from '$lib/types'
   import { formatDuration, formatShortDate, formatTime, formatVolume, getCompletedSetCount, getWorkoutVolume } from '$lib/utils'
+  import { getWorkingSetNumber } from '$lib/workout-sets'
   import ConfirmDialog from './ConfirmDialog.svelte'
   import ReadOnlyWorkoutSetHeader from './ReadOnlyWorkoutSetHeader.svelte'
   import ReadOnlyWorkoutSetRow from './ReadOnlyWorkoutSetRow.svelte'
@@ -64,8 +65,9 @@
   <div class="mt-6 space-y-3">
     {#each completedExercises as exercise, exerciseIndex (exercise.id)}
       {@const completedSets = exercise.sets.filter((set) => set.completed)}
+      {@const completedWorkingSetCount = completedSets.filter((set) => !set.warmup).length}
       {@const trackingMode = getExerciseTrackingMode(exercise)}
-      <section class="rounded-2xl bg-paper p-4 sm:p-5" aria-label={`${exercise.name}, ${completedSets.length} completed ${completedSets.length === 1 ? 'set' : 'sets'}`}>
+      <section class="rounded-2xl bg-paper p-4 sm:p-5" aria-label={`${exercise.name}, ${completedWorkingSetCount} completed working ${completedWorkingSetCount === 1 ? 'set' : 'sets'}`}>
         <div class="flex items-start justify-between gap-4 pb-4">
           <div class="min-w-0">
             <p class="font-dot text-xs tabular-nums text-accent">EXERCISE {String(exerciseIndex + 1).padStart(2, '0')}</p>
@@ -74,7 +76,7 @@
             </button>
             <p class="mt-1 text-xs text-muted">{exercise.muscle} · {exercise.equipment}</p>
           </div>
-          <span class="shrink-0 rounded-full bg-canvas px-2.5 py-1 text-[0.625rem] font-medium uppercase text-muted">{completedSets.length} {completedSets.length === 1 ? 'set' : 'sets'}</span>
+          <span class="shrink-0 rounded-full bg-canvas px-2.5 py-1 text-[0.625rem] font-medium uppercase text-muted">{completedWorkingSetCount} working {completedWorkingSetCount === 1 ? 'set' : 'sets'}</span>
         </div>
 
         {#if exercise.notes}<div class="mb-4 rounded-xl bg-canvas px-3 py-2"><span class="text-[0.6875rem] font-medium uppercase text-muted">Exercise note</span><p class="mt-1 text-sm leading-5">{exercise.notes}</p></div>{/if}
@@ -82,7 +84,8 @@
         <ReadOnlyWorkoutSetHeader {trackingMode} />
         <div class="space-y-1">
           {#each completedSets as set, setIndex (set.id)}
-            <ReadOnlyWorkoutSetRow {set} {setIndex} exerciseName={exercise.name} {trackingMode} />
+            {@const setNumber = getWorkingSetNumber(completedSets, setIndex)}
+            <ReadOnlyWorkoutSetRow {set} {setIndex} {setNumber} exerciseName={exercise.name} {trackingMode} />
           {/each}
         </div>
       </section>

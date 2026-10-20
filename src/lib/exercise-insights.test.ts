@@ -34,7 +34,7 @@ function completedTimedWorkout(): WorkoutSession {
         distanceMeters: 2_000,
         completed: true,
         completedAt: '2026-10-19T08:30:00.000Z',
-        failure: false,
+        warmup: false,
         notes: '',
       }],
     }],
