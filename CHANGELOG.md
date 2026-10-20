@@ -125,3 +125,4 @@
 - Replaced explicit recovery slots with a routine-only FIFO cycle and configurable consecutive-training-day cadence; unscheduled days off reset the streak without consuming the next routine.
 - Added inferred rest-day guidance to Today while preserving the queued workout, including a deliberate train-anyway action that starts the queued routine.
 - Migrated local and synchronized cycle records by removing legacy rest slots, preserving the next routine, and storing the training-days-before-rest setting.
+- Updated production MCP authentication for Cloudflare Access Managed OAuth by validating the signed Access assertion forwarded to the existing LifeOS Worker while keeping client OAuth tokens opaque.

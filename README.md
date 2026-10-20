@@ -95,16 +95,16 @@ The production runtime requires the following bindings:
 | --- | --- | --- |
 | `DB` | D1 binding | Stores synchronized workouts, routines, and training-cycle state |
 | `CF_ACCESS_TEAM_DOMAIN` | Environment variable | Identifies the Cloudflare Access issuer |
-| `CF_ACCESS_AUD` | Environment variable | Identifies the protected Access application |
+| `CF_ACCESS_AUD` | Environment variable | Identifies the Access application that protects the MCP endpoint |
 | `MCP_RESOURCE_URL` | Environment variable | Canonical absolute URL of the MCP endpoint |
-| `MCP_ALLOWED_SUBJECT` | Environment variable | Cloudflare Access JWT subject allowed to use this single-owner MCP |
+| `MCP_ALLOWED_SUBJECT` | Environment variable | Cloudflare Access assertion subject allowed to use this single-owner MCP |
 | `MCP_ALLOWED_HOSTS` | Environment variable | Comma-separated hostnames accepted by MCP DNS-rebinding checks |
 | `MCP_ALLOWED_ORIGINS` | Environment variable | Optional comma-separated browser origins accepted by the MCP endpoint |
 Local development uses `LOCAL_SYNC_TOKEN` and `MCP_LOCAL_TOKEN` from the local Worker configuration. Those credentials are not used by production builds.
 
 ### MCP analytics
 
-The stateless Streamable HTTP endpoint is available at `/mcp`. Every request requires an `Authorization: Bearer …` header. In local development, use the committed development-only `MCP_LOCAL_TOKEN`; in production, pass a valid Cloudflare Access JWT whose subject matches `MCP_ALLOWED_SUBJECT`. The protected-resource metadata endpoint is `/.well-known/oauth-protected-resource/mcp`.
+The stateless Streamable HTTP endpoint is available at `/mcp`. Local development uses the committed development-only `MCP_LOCAL_TOKEN`. In production, enable Cloudflare Access Managed OAuth on the existing LifeOS Access application; Access resolves the client's opaque OAuth token and forwards a signed `Cf-Access-Jwt-Assertion`, which LifeOS verifies against `CF_ACCESS_AUD` and `MCP_ALLOWED_SUBJECT`. The protected-resource metadata endpoint is `/.well-known/oauth-protected-resource/mcp`.
 
 | Tool | Access | Result |
 | --- | --- | --- |

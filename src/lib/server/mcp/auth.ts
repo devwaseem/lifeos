@@ -53,14 +53,16 @@ export function validateMcpRequestOrigin(request: Request, environment: McpAuthE
 
 export async function authenticateMcpRequest(request: Request, environment: McpAuthEnvironment): Promise<AuthInfo | Response> {
   const authorization = request.headers.get('Authorization')
-  if (!authorization?.startsWith('Bearer ')) return challenge(environment, request)
-  const token = authorization.slice('Bearer '.length)
+  const bearerToken = authorization?.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : null
+  const accessAssertion = request.headers.get('Cf-Access-Jwt-Assertion')
   const resource = resourceUrl(environment, request)
 
   if (environment.MCP_LOCAL_TOKEN) {
-    if (token !== environment.MCP_LOCAL_TOKEN) return challenge(environment, request)
+    if (bearerToken !== environment.MCP_LOCAL_TOKEN) return challenge(environment, request)
     return {
-      token,
+      token: bearerToken,
       clientId: 'lifeos-local-mcp',
       scopes: ['training:read', 'routines:read'],
       expiresAt: Math.floor(Date.now() / 1000) + 60 * 60,
@@ -72,6 +74,9 @@ export async function authenticateMcpRequest(request: Request, environment: McpA
   if (!environment.CF_ACCESS_TEAM_DOMAIN || !environment.CF_ACCESS_AUD || !environment.MCP_ALLOWED_SUBJECT) {
     return Response.json({ error: 'MCP authentication is not configured' }, { status: 503 })
   }
+  const assertion = accessAssertion ?? bearerToken
+  if (!assertion) return challenge(environment, request)
+
   const issuer = `https://${environment.CF_ACCESS_TEAM_DOMAIN}.cloudflareaccess.com`
   let keySet = accessKeySets.get(issuer)
   if (!keySet) {
@@ -79,13 +84,13 @@ export async function authenticateMcpRequest(request: Request, environment: McpA
     accessKeySets.set(issuer, keySet)
   }
   try {
-    const { payload } = await jwtVerify(token, keySet, {
+    const { payload } = await jwtVerify(assertion, keySet, {
       issuer,
       audience: environment.CF_ACCESS_AUD,
     })
     if (payload.sub !== environment.MCP_ALLOWED_SUBJECT || typeof payload.exp !== 'number') return challenge(environment, request)
     return {
-      token,
+      token: bearerToken ?? assertion,
       clientId: typeof payload.client_id === 'string' ? payload.client_id : payload.sub,
       scopes: ['training:read', 'routines:read'],
       expiresAt: payload.exp,
