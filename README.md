@@ -23,9 +23,11 @@ Training metrics are descriptive heuristics rather than medical or injury-risk a
 flowchart LR
     UI[SvelteKit PWA] --> IDB[(IndexedDB)]
     UI -->|Online synchronization| Access[Cloudflare Access]
-    Client[Owner MCP client] -->|Bearer token| Access
+    Browser[Owner authorization] --> Access
+    Access --> OAuth[LifeOS OAuth module]
+    Client[Owner MCP client] -->|OAuth bearer token| OAuth
     Access --> Sync[/Sync endpoint/]
-    Access --> MCP[/MCP endpoint/]
+    OAuth --> MCP[/MCP endpoint/]
     Sync --> D1[(Cloudflare D1)]
     MCP --> ReadModel[Bounded analytics read model]
     ReadModel --> D1
@@ -94,17 +96,19 @@ The production runtime requires the following bindings:
 | Name | Type | Purpose |
 | --- | --- | --- |
 | `DB` | D1 binding | Stores synchronized workouts, routines, and training-cycle state |
-| `CF_ACCESS_TEAM_DOMAIN` | Environment variable | Identifies the Cloudflare Access issuer |
-| `CF_ACCESS_AUD` | Environment variable | Identifies the Access application that protects the MCP endpoint |
+| `OAUTH_KV` | KV binding | Stores hashed OAuth clients, grants, authorization codes, and tokens |
+| `CF_ACCESS_TEAM_DOMAIN` | Environment variable | Identifies the Cloudflare Access issuer used to authenticate the owner at authorization time |
+| `CF_ACCESS_AUD` | Environment variable | Identifies the Access application that protects LifeOS and the OAuth authorization page |
 | `MCP_RESOURCE_URL` | Environment variable | Canonical absolute URL of the MCP endpoint |
-| `MCP_ALLOWED_SUBJECT` | Environment variable | Cloudflare Access assertion subject allowed to use this single-owner MCP |
+| `MCP_ALLOWED_SUBJECT` | Environment variable | Cloudflare Access assertion subject allowed to authorize this single-owner MCP |
 | `MCP_ALLOWED_HOSTS` | Environment variable | Comma-separated hostnames accepted by MCP DNS-rebinding checks |
 | `MCP_ALLOWED_ORIGINS` | Environment variable | Optional comma-separated browser origins accepted by the MCP endpoint |
+
 Local development uses `LOCAL_SYNC_TOKEN` and `MCP_LOCAL_TOKEN` from the local Worker configuration. Those credentials are not used by production builds.
 
 ### MCP analytics
 
-The stateless Streamable HTTP endpoint is available at `/mcp`. Local development uses the committed development-only `MCP_LOCAL_TOKEN`. In production, enable Cloudflare Access Managed OAuth on the existing LifeOS Access application; Access resolves the client's opaque OAuth token and forwards a signed `Cf-Access-Jwt-Assertion`, which LifeOS verifies against `CF_ACCESS_AUD` and `MCP_ALLOWED_SUBJECT`. The protected-resource metadata endpoint is `/.well-known/oauth-protected-resource/mcp`.
+The stateless Streamable HTTP endpoint is available at `/mcp`. LifeOS is its own OAuth 2.1 authorization and resource server, backed by `OAUTH_KV`; it supports PKCE, refresh tokens, Dynamic Client Registration, protected-resource discovery, and authorization-server discovery. Cloudflare Access still authenticates the owner on `/authorize`, and LifeOS verifies the signed Access assertion against `CF_ACCESS_AUD` and `MCP_ALLOWED_SUBJECT` before granting a client read-only tokens. The protected-resource metadata endpoint is `/.well-known/oauth-protected-resource/mcp`.
 
 | Tool | Access | Result |
 | --- | --- | --- |
@@ -130,19 +134,19 @@ LifeOS passes a versioned payload through Apple’s `shortcuts://run-shortcut` U
 
 ## Deployment
 
-1. Create a Cloudflare D1 database.
-2. Apply the migrations in `migrations/`.
-3. Configure the `DB` binding with the deployment-specific database identifier.
+1. Create a Cloudflare D1 database and apply the migrations in `migrations/`.
+2. Create a Cloudflare KV namespace for `OAUTH_KV`.
+3. Configure the `DB` and `OAUTH_KV` bindings with their deployment-specific identifiers.
 4. Create a Cloudflare Access application for the deployment hostname.
-5. Configure `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` in the Pages environment.
-6. Configure `MCP_RESOURCE_URL`, `MCP_ALLOWED_SUBJECT`, `MCP_ALLOWED_HOSTS`, and any browser origins allowed to call MCP.
+5. Configure `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `MCP_RESOURCE_URL`, `MCP_ALLOWED_SUBJECT`, `MCP_ALLOWED_HOSTS`, and any browser origins allowed to call MCP.
+6. Keep `/authorize` protected by the main Access application. Create a more-specific Access application with a **Bypass / Everyone** policy for `/mcp`, `/.well-known/*`, and `/oauth/*`; these public protocol routes perform their own OAuth token validation. Disable Access Managed OAuth on the main application.
 7. Deploy the application:
 
    ```bash
    npm run deploy
    ```
 
-8. Confirm that unauthenticated requests are intercepted by Access, authenticated synchronization succeeds, and an authorized MCP client can initialize and call a read tool.
+8. Confirm that Access still intercepts unauthenticated UI and `/authorize` requests, authenticated synchronization succeeds, and a newly registered OAuth client can initialize MCP and list the four read-only tools.
 
 The production sync endpoint accepts only validated Cloudflare Access assertions. It does not use a browser-managed shared secret.
 

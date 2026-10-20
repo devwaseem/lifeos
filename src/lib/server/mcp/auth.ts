@@ -10,6 +10,12 @@ export interface McpAuthEnvironment {
   CF_ACCESS_TEAM_DOMAIN?: string
   CF_ACCESS_AUD?: string
 }
+
+export interface AccessIdentity {
+  subject: string
+  clientId: string
+  expiresAt: number
+}
 const accessKeySets = new Map<string, JWTVerifyGetKey>()
 
 function list(value: string | undefined) {
@@ -51,12 +57,41 @@ export function validateMcpRequestOrigin(request: Request, environment: McpAuthE
   return null
 }
 
+export async function verifyAccessIdentity(
+  assertion: string | null,
+  environment: McpAuthEnvironment,
+): Promise<AccessIdentity | null> {
+  if (!assertion || !environment.CF_ACCESS_TEAM_DOMAIN || !environment.CF_ACCESS_AUD || !environment.MCP_ALLOWED_SUBJECT) {
+    return null
+  }
+
+  const issuer = `https://${environment.CF_ACCESS_TEAM_DOMAIN}.cloudflareaccess.com`
+  let keySet = accessKeySets.get(issuer)
+  if (!keySet) {
+    keySet = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`))
+    accessKeySets.set(issuer, keySet)
+  }
+  try {
+    const { payload } = await jwtVerify(assertion, keySet, {
+      issuer,
+      audience: environment.CF_ACCESS_AUD,
+    })
+    if (payload.sub !== environment.MCP_ALLOWED_SUBJECT || typeof payload.exp !== 'number') return null
+    return {
+      subject: payload.sub,
+      clientId: typeof payload.client_id === 'string' ? payload.client_id : payload.sub,
+      expiresAt: payload.exp,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function authenticateMcpRequest(request: Request, environment: McpAuthEnvironment): Promise<AuthInfo | Response> {
   const authorization = request.headers.get('Authorization')
   const bearerToken = authorization?.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : null
-  const accessAssertion = request.headers.get('Cf-Access-Jwt-Assertion')
   const resource = resourceUrl(environment, request)
 
   if (environment.MCP_LOCAL_TOKEN) {
@@ -74,31 +109,18 @@ export async function authenticateMcpRequest(request: Request, environment: McpA
   if (!environment.CF_ACCESS_TEAM_DOMAIN || !environment.CF_ACCESS_AUD || !environment.MCP_ALLOWED_SUBJECT) {
     return Response.json({ error: 'MCP authentication is not configured' }, { status: 503 })
   }
-  const assertion = accessAssertion ?? bearerToken
-  if (!assertion) return challenge(environment, request)
-
-  const issuer = `https://${environment.CF_ACCESS_TEAM_DOMAIN}.cloudflareaccess.com`
-  let keySet = accessKeySets.get(issuer)
-  if (!keySet) {
-    keySet = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`))
-    accessKeySets.set(issuer, keySet)
-  }
-  try {
-    const { payload } = await jwtVerify(assertion, keySet, {
-      issuer,
-      audience: environment.CF_ACCESS_AUD,
-    })
-    if (payload.sub !== environment.MCP_ALLOWED_SUBJECT || typeof payload.exp !== 'number') return challenge(environment, request)
-    return {
-      token: bearerToken ?? assertion,
-      clientId: typeof payload.client_id === 'string' ? payload.client_id : payload.sub,
-      scopes: ['training:read', 'routines:read'],
-      expiresAt: payload.exp,
-      resource,
-      extra: { subject: payload.sub },
-    }
-  } catch {
-    return challenge(environment, request)
+  const identity = await verifyAccessIdentity(
+    request.headers.get('Cf-Access-Jwt-Assertion') ?? bearerToken,
+    environment,
+  )
+  if (!identity) return challenge(environment, request)
+  return {
+    token: bearerToken ?? request.headers.get('Cf-Access-Jwt-Assertion')!,
+    clientId: identity.clientId,
+    scopes: ['training:read', 'routines:read'],
+    expiresAt: identity.expiresAt,
+    resource,
+    extra: { subject: identity.subject },
   }
 }
 

@@ -1,0 +1,31 @@
+name = "lifeos-mcp"
+main = "src/worker/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["global_fetch_strictly_public"]
+workers_dev = true
+
+routes = [
+  { pattern = "life.w9m.app/mcp*", zone_name = "w9m.app" },
+  { pattern = "life.w9m.app/authorize*", zone_name = "w9m.app" },
+  { pattern = "life.w9m.app/token*", zone_name = "w9m.app" },
+  { pattern = "life.w9m.app/oauth/*", zone_name = "w9m.app" },
+  { pattern = "life.w9m.app/.well-known/*", zone_name = "w9m.app" },
+]
+
+[vars]
+CF_ACCESS_TEAM_DOMAIN = "w9m"
+MCP_RESOURCE_URL = "https://life.w9m.app/mcp"
+MCP_ALLOWED_HOSTS = "life.w9m.app"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lifeos"
+database_id = "19d073bb-dc53-4017-8086-f90f8975a7cf"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "2f7c6a77824942d78133a39142891272"
+
+[observability]
+enabled = true

@@ -1,8 +1,8 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { handleWorkoutSyncRequest, type WorkoutSyncEnvironment } from '../lib/server/workout-sync'
-import { handleMcpRequest, type McpEnvironment } from '../lib/server/mcp/server'
+import { handleMcpOAuthRequest, type McpOAuthEnvironment } from '../lib/server/mcp/oauth'
 type WorkerEnvironment = {
-  Bindings: WorkoutSyncEnvironment & McpEnvironment
+  Bindings: WorkoutSyncEnvironment & McpOAuthEnvironment
 }
 
 const app = new Hono<WorkerEnvironment>()
@@ -13,8 +13,15 @@ app.get('/api/health', async (context) => {
 })
 
 app.post('/api/sync', (context) => handleWorkoutSyncRequest(context.req.raw, context.env))
-app.post('/mcp', (context) => handleMcpRequest(context.req.raw, context.env))
-app.get('/.well-known/oauth-protected-resource/mcp', (context) => handleMcpRequest(context.req.raw, context.env))
+const handleOAuth = (context: Context<WorkerEnvironment>) =>
+  handleMcpOAuthRequest(context.req.raw, context.env, context.executionCtx as unknown as ExecutionContext)
+
+app.all('/mcp', handleOAuth)
+app.all('/authorize', handleOAuth)
+app.all('/token', handleOAuth)
+app.all('/oauth/register', handleOAuth)
+app.all('/.well-known/oauth-authorization-server', handleOAuth)
+app.all('/.well-known/oauth-protected-resource/mcp', handleOAuth)
 
 app.notFound((context) => context.json({ error: 'Not found' }, 404))
 app.onError((error, context) => {

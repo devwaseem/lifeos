@@ -1,6 +1,7 @@
 name = "lifeos-local-api"
 main = "src/worker/index.ts"
 compatibility_date = "2026-10-01"
+compatibility_flags = ["global_fetch_strictly_public"]
 
 [vars]
 LOCAL_SYNC_TOKEN = "lifeos-local-dev"
@@ -14,3 +15,7 @@ binding = "DB"
 database_name = "lifeos"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "2f7c6a77824942d78133a39142891272"

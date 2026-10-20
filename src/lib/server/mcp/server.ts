@@ -87,20 +87,28 @@ export function createLifeOsMcpServer(database: D1Database) {
   return server
 }
 
-export async function handleMcpRequest(request: Request, environment: McpEnvironment) {
-  const resourcePath = new URL(environment.MCP_RESOURCE_URL ?? new URL('/mcp', request.url).toString()).pathname
-  if (request.method === 'GET' && new URL(request.url).pathname === `/.well-known/oauth-protected-resource${resourcePath}`) {
-    return protectedResourceMetadata(request, environment)
-  }
+export async function handleAuthorizedMcpRequest(
+  request: Request,
+  environment: McpEnvironment,
+  authentication: AuthInfo,
+) {
   const originFailure = validateMcpRequestOrigin(request, environment)
   if (originFailure) return originFailure
-  const authentication = await authenticateMcpRequest(request, environment)
-  if (authentication instanceof Response) return authentication
 
   const handler = createMcpHandler(() => createLifeOsMcpServer(environment.DB), {
     legacy: 'stateless',
     responseMode: 'json',
     maxRequestBodySize: 64 * 1024,
   })
-  return handler.fetch(request, { authInfo: authentication as AuthInfo })
+  return handler.fetch(request, { authInfo: authentication })
+}
+
+export async function handleMcpRequest(request: Request, environment: McpEnvironment) {
+  const resourcePath = new URL(environment.MCP_RESOURCE_URL ?? new URL('/mcp', request.url).toString()).pathname
+  if (request.method === 'GET' && new URL(request.url).pathname === `/.well-known/oauth-protected-resource${resourcePath}`) {
+    return protectedResourceMetadata(request, environment)
+  }
+  const authentication = await authenticateMcpRequest(request, environment)
+  if (authentication instanceof Response) return authentication
+  return handleAuthorizedMcpRequest(request, environment, authentication as AuthInfo)
 }

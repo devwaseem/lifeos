@@ -10,11 +10,14 @@
     "dev:api": "wrangler dev --local --config wrangler.worker.toml --port 8787 --persist-to .wrangler/state",
     "build": "vite build",
     "build:worker": "wrangler deploy --dry-run --config wrangler.worker.toml --outdir .wrangler/worker-build",
+    "build:mcp": "wrangler deploy --dry-run --config wrangler.mcp.toml --outdir .wrangler/mcp-build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "typecheck": "npm run check",
-    "deploy": "npm run build && wrangler pages deploy .svelte-kit/cloudflare --project-name lifeos --branch production",
+    "deploy": "npm run deploy:web && npm run deploy:mcp",
+    "deploy:web": "npm run build && wrangler pages deploy .svelte-kit/cloudflare --project-name lifeos --branch production",
+    "deploy:mcp": "wrangler deploy --config wrangler.mcp.toml",
     "db:setup:local": "npm run db:migrate:local && npm run db:seed:local",
     "db:migrate:local": "wrangler d1 migrations apply lifeos --local --config wrangler.worker.toml --persist-to .wrangler/state",
     "db:seed:local": "wrangler d1 execute lifeos --local --config wrangler.worker.toml --persist-to .wrangler/state --file scripts/seed-local-d1.sql --yes",
@@ -22,6 +25,7 @@
     "pwa:assets": "pwa-assets-generator --preset minimal public/favicon.svg"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^1.2.3",
     "@fontsource-variable/doto": "^5.3.0",
     "@fontsource-variable/ibm-plex-sans": "^5.3.0",
     "@lucide/svelte": "^1.59.0",
