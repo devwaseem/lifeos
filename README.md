@@ -99,10 +99,10 @@ Create that shortcut once in Apple Shortcuts:
 
 1. Accept text as the shortcut input and convert the JSON text to a dictionary.
 2. Read `startedAt` and `durationSeconds`, convert the start value to a date, and divide the duration by 60.
-3. Use **Log Workout** to add a **Traditional Strength Training** workout with the supplied start time and duration in minutes.
-4. Let the shortcut finish normally. LifeOS supplies the success, cancellation, and error callback URLs when it launches the shortcut; the shortcut does not need an **Open X-Callback URL** action.
+3. Use **Log Workout** to add a **Traditional Strength Training** workout with the supplied start time and duration in minutes. Set Calories to `0 cal` and Distance to `0 km` so those optional fields always receive valid values.
+4. Add a Text action containing `Added`, then finish with **Stop and Output** using that Text value.
 
-LifeOS passes a versioned payload through Apple’s `shortcuts://x-callback-url/run-shortcut` URL and records success, cancellation, or failure when Shortcuts returns. The successful export receipt stays in IndexedDB; it is not uploaded to D1. A completed workout remains safely stored even if Shortcuts is missing, cancelled, or unavailable. If Shortcuts writes the workout but cannot return to LifeOS, check Apple Health before retrying because the Shortcut cannot query existing workouts through **Find Health Samples**.
+LifeOS passes a versioned payload through Apple’s `shortcuts://run-shortcut` URL. It deliberately does not use an HTTPS callback because iOS opens that callback in Safari rather than the installed PWA. LifeOS does not request a return; check Apple Health after Shortcuts finishes. The launch attempt stays in IndexedDB and is not uploaded to D1. Check Apple Health before retrying because the Shortcut cannot query existing workouts through **Find Health Samples**.
 
 ## Deployment
 

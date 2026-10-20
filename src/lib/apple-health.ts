@@ -14,24 +14,6 @@ export interface AppleHealthExportRecord {
   lastError: string | null
 }
 
-export interface AppleHealthExportCallback {
-  workoutId: string
-  attemptId: string
-  status: 'success' | 'cancelled' | 'error'
-  errorMessage: string | null
-}
-
-export function getAppleHealthExportFailureMessage(
-  callback: Pick<AppleHealthExportCallback, 'status' | 'errorMessage'>,
-) {
-  if (callback.status === 'success') return null
-  if (callback.status === 'cancelled') return 'Export cancelled. Your workout is still safe in LifeOS.'
-
-  const detail = callback.errorMessage?.trim()
-  return detail
-    ? `Shortcuts: ${detail.slice(0, 240)}`
-    : 'Shortcuts could not add this workout to Apple Health. Try again.'
-}
 
 interface AppleHealthShortcutPayload {
   schemaVersion: 1
@@ -82,35 +64,7 @@ export function createAppleHealthShortcutPayload(workout: WorkoutSession): Apple
   }
 }
 
-function callbackUrl(origin: string, workoutId: string, attemptId: string, status: AppleHealthExportCallback['status']) {
-  const url = new URL('/', origin)
-  url.searchParams.set('view', 'workout-history')
-  url.searchParams.set('workout', workoutId)
-  url.searchParams.set('health-export', status)
-  url.searchParams.set('health-attempt', attemptId)
-  return url.toString()
-}
-
-export function createAppleHealthShortcutUrl(workout: WorkoutSession, attemptId: string, origin: string) {
+export function createAppleHealthShortcutUrl(workout: WorkoutSession) {
   const payload = JSON.stringify(createAppleHealthShortcutPayload(workout))
-  const successUrl = callbackUrl(origin, workout.id, attemptId, 'success')
-  const cancelUrl = callbackUrl(origin, workout.id, attemptId, 'cancelled')
-  const errorUrl = callbackUrl(origin, workout.id, attemptId, 'error')
-
-  return `shortcuts://x-callback-url/run-shortcut?name=${encodeURIComponent(APPLE_HEALTH_SHORTCUT_NAME)}&input=text&text=${encodeURIComponent(payload)}&x-success=${encodeURIComponent(successUrl)}&x-cancel=${encodeURIComponent(cancelUrl)}&x-error=${encodeURIComponent(errorUrl)}`
-}
-
-export function readAppleHealthExportCallback(search: string): AppleHealthExportCallback | null {
-  const parameters = new URLSearchParams(search)
-  const status = parameters.get('health-export')
-  const workoutId = parameters.get('workout')
-  const attemptId = parameters.get('health-attempt')
-  if ((status !== 'success' && status !== 'cancelled' && status !== 'error') || !workoutId || !attemptId) return null
-
-  return {
-    workoutId,
-    attemptId,
-    status,
-    errorMessage: status === 'error' ? parameters.get('errorMessage') : null,
-  }
+  return `shortcuts://run-shortcut?name=${encodeURIComponent(APPLE_HEALTH_SHORTCUT_NAME)}&input=text&text=${encodeURIComponent(payload)}`
 }

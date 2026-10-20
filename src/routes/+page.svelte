@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
   import type { TransitionConfig } from 'svelte/transition'
-  import { createAppleHealthShortcutUrl, createPendingAppleHealthExport, getAppleHealthExportFailureMessage, isAppleHealthShortcutAvailable, readAppleHealthExportCallback, type AppleHealthExportCallback, type AppleHealthExportRecord } from '$lib/apple-health'
+  import { createAppleHealthShortcutUrl, createPendingAppleHealthExport, isAppleHealthShortcutAvailable, type AppleHealthExportRecord } from '$lib/apple-health'
   import ActiveWorkoutView from '$lib/components/ActiveWorkoutView.svelte'
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte'
   import AppShell from '$lib/components/AppShell.svelte'
@@ -250,26 +250,6 @@
     ]
   }
 
-  async function handleAppleHealthCallback(callback: AppleHealthExportCallback) {
-    const existing = appleHealthExports.find((record) => record.workoutId === callback.workoutId)
-    if (!existing || existing.attemptId !== callback.attemptId) return
-
-    const succeeded = callback.status === 'success'
-    const nextRecord: AppleHealthExportRecord = {
-      ...existing,
-      status: succeeded ? 'exported' : 'pending',
-      attemptId: null,
-      exportedAt: succeeded ? new Date().toISOString() : existing.exportedAt,
-      lastError: getAppleHealthExportFailureMessage(callback),
-    }
-    upsertAppleHealthExport(nextRecord)
-    try {
-      await saveAppleHealthExport(nextRecord)
-    } catch {
-      dataError = 'The Apple Health export result could not be saved locally.'
-    }
-  }
-
   async function exportWorkoutToAppleHealth(workout: WorkoutSession) {
     appleHealthActionError = null
     if (!canExportToAppleHealth) {
@@ -292,7 +272,7 @@
     try {
       await saveAppleHealthExport(nextRecord)
       upsertAppleHealthExport(nextRecord)
-      window.location.href = createAppleHealthShortcutUrl(workout, attemptId, window.location.origin)
+      window.location.href = createAppleHealthShortcutUrl(workout)
       return true
     } catch (error) {
       appleHealthActionError = error instanceof Error
@@ -310,7 +290,6 @@
 
   onMount(() => {
     let cancelled = false
-    const appleHealthCallback = readAppleHealthExportCallback(window.location.search)
     initializeNavigation()
     online = navigator.onLine
     canExportToAppleHealth = isAppleHealthShortcutAvailable(navigator)
@@ -349,7 +328,6 @@
         customExercises = storedCustomExercises
         exerciseVideos = storedExerciseVideos
         appleHealthExports = storedAppleHealthExports
-        if (appleHealthCallback) await handleAppleHealthCallback(appleHealthCallback)
 
         if (canSync) {
           const synced = await performSync(
