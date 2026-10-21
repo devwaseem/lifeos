@@ -1,54 +1,48 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { authenticateMcpRequest, type McpAuthEnvironment } from './auth'
 
-const { jwtVerify } = vi.hoisted(() => ({ jwtVerify: vi.fn() }))
-
-vi.mock('jose', () => ({
-  createRemoteJWKSet: vi.fn(() => Symbol('access-key-set')),
-  jwtVerify,
-}))
-
 const environment: McpAuthEnvironment = {
+  MCP_SHARED_KEY: 'lifeos-shared-test-key',
   MCP_RESOURCE_URL: 'https://life.w9m.app/mcp',
   MCP_ALLOWED_HOSTS: 'life.w9m.app',
-  MCP_ALLOWED_SUBJECT: 'owner-subject',
-  CF_ACCESS_TEAM_DOMAIN: 'w9m',
-  CF_ACCESS_AUD: 'lifeos-audience',
 }
 
-describe('MCP authentication', () => {
-  beforeEach(() => {
-    jwtVerify.mockReset()
-  })
-
-  it('authenticates a managed OAuth request using the Access assertion instead of the opaque bearer token', async () => {
-    jwtVerify.mockResolvedValue({
-      payload: {
-        sub: 'owner-subject',
-        exp: 2_000_000_000,
-      },
-    })
-    const request = new Request('https://life.w9m.app/mcp', {
-      headers: {
-        Authorization: 'Bearer oauth:opaque-access-token',
-        'Cf-Access-Jwt-Assertion': 'signed-access-assertion',
-      },
-    })
+describe('MCP shared-key authentication', () => {
+  it('authenticates the exact query key without propagating the secret', async () => {
+    const request = new Request('https://life.w9m.app/mcp?key=lifeos-shared-test-key')
 
     const result = await authenticateMcpRequest(request, environment)
 
     expect(result).not.toBeInstanceOf(Response)
-    expect(jwtVerify).toHaveBeenCalledWith(
-      'signed-access-assertion',
-      expect.anything(),
-      {
-        issuer: 'https://w9m.cloudflareaccess.com',
-        audience: 'lifeos-audience',
-      },
-    )
     if (!(result instanceof Response)) {
-      expect(result.token).toBe('oauth:opaque-access-token')
-      expect(result.extra).toEqual({ subject: 'owner-subject' })
+      expect(result.token).toBe('shared-key-authenticated')
+      expect(result.token).not.toBe(environment.MCP_SHARED_KEY)
+      expect(result.clientId).toBe('lifeos-owner')
+      expect(result.extra).toEqual({ subject: 'lifeos-owner' })
     }
+  })
+
+  it.each([
+    'https://life.w9m.app/mcp',
+    'https://life.w9m.app/mcp?key=wrong',
+    'https://life.w9m.app/mcp?key=lifeos-shared-test-key&key=lifeos-shared-test-key',
+  ])('rejects an absent, incorrect, or ambiguous key: %s', async (url) => {
+    const result = await authenticateMcpRequest(new Request(url), environment)
+
+    expect(result).toBeInstanceOf(Response)
+    if (result instanceof Response) {
+      expect(result.status).toBe(401)
+      expect(result.headers.get('Cache-Control')).toBe('no-store')
+    }
+  })
+
+  it('fails closed when the shared key is not configured', async () => {
+    const result = await authenticateMcpRequest(
+      new Request('https://life.w9m.app/mcp?key=anything'),
+      { MCP_RESOURCE_URL: environment.MCP_RESOURCE_URL },
+    )
+
+    expect(result).toBeInstanceOf(Response)
+    if (result instanceof Response) expect(result.status).toBe(503)
   })
 })

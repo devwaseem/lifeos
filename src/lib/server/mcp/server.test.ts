@@ -3,23 +3,29 @@ import { handleMcpRequest, type McpEnvironment } from './server'
 
 const environment: McpEnvironment = {
   DB: {} as D1Database,
-  MCP_LOCAL_TOKEN: 'lifeos-mcp-test',
+  MCP_SHARED_KEY: 'lifeos-mcp-test',
   MCP_RESOURCE_URL: 'http://localhost:8787/mcp',
   MCP_ALLOWED_HOSTS: 'localhost',
   MCP_ALLOWED_ORIGINS: 'http://localhost:5173',
 }
 
-function request(headers: Record<string, string> = {}, body: object = {
-  jsonrpc: '2.0',
-  id: 1,
-  method: 'initialize',
-  params: {
-    protocolVersion: '2025-06-18',
-    capabilities: {},
-    clientInfo: { name: 'lifeos-test', version: '1.0.0' },
+function request(
+  key: string | null,
+  headers: Record<string, string> = {},
+  body: object = {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'lifeos-test', version: '1.0.0' },
+    },
   },
-}) {
-  return new Request('http://localhost:8787/mcp', {
+) {
+  const url = new URL('http://localhost:8787/mcp')
+  if (key !== null) url.searchParams.set('key', key)
+  return new Request(url, {
     method: 'POST',
     headers: {
       Accept: 'application/json, text/event-stream',
@@ -40,16 +46,15 @@ async function responseBody(response: Response) {
 }
 
 describe('LifeOS MCP HTTP interface', () => {
-  it('requires a bearer token on every MCP request', async () => {
-    const response = await handleMcpRequest(request(), environment)
+  it('requires the shared query key on every MCP request', async () => {
+    const response = await handleMcpRequest(request(null), environment)
 
     expect(response.status).toBe(401)
-    expect(response.headers.get('WWW-Authenticate')).toContain('Bearer')
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 
   it('rejects an unapproved origin before invoking MCP', async () => {
-    const response = await handleMcpRequest(request({
-      Authorization: 'Bearer lifeos-mcp-test',
+    const response = await handleMcpRequest(request('lifeos-mcp-test', {
       Origin: 'https://untrusted.example',
     }), environment)
 
@@ -57,7 +62,7 @@ describe('LifeOS MCP HTTP interface', () => {
   })
 
   it('serves a stateless MCP initialization request for an authorized owner', async () => {
-    const response = await handleMcpRequest(request({ Authorization: 'Bearer lifeos-mcp-test' }), environment)
+    const response = await handleMcpRequest(request('lifeos-mcp-test'), environment)
     const body = await responseBody(response) as { result?: { serverInfo?: { name?: string } } }
 
     expect(response.status).toBe(200)
@@ -66,7 +71,8 @@ describe('LifeOS MCP HTTP interface', () => {
 
   it('advertises only bounded read-only analytics tools', async () => {
     const response = await handleMcpRequest(request(
-      { Authorization: 'Bearer lifeos-mcp-test' },
+      'lifeos-mcp-test',
+      {},
       { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} },
     ), environment)
     const body = await responseBody(response) as { result?: { tools?: Array<{ name: string }> } }

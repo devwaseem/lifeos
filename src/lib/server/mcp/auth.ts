@@ -1,22 +1,11 @@
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose'
 import type { AuthInfo } from '@modelcontextprotocol/server'
 
 export interface McpAuthEnvironment {
-  MCP_LOCAL_TOKEN?: string
+  MCP_SHARED_KEY?: string
   MCP_RESOURCE_URL?: string
   MCP_ALLOWED_HOSTS?: string
   MCP_ALLOWED_ORIGINS?: string
-  MCP_ALLOWED_SUBJECT?: string
-  CF_ACCESS_TEAM_DOMAIN?: string
-  CF_ACCESS_AUD?: string
 }
-
-export interface AccessIdentity {
-  subject: string
-  clientId: string
-  expiresAt: number
-}
-const accessKeySets = new Map<string, JWTVerifyGetKey>()
 
 function list(value: string | undefined) {
   return value?.split(',').map((item) => item.trim()).filter(Boolean) ?? []
@@ -26,13 +15,24 @@ function resourceUrl(environment: McpAuthEnvironment, request: Request) {
   return new URL(environment.MCP_RESOURCE_URL ?? new URL('/mcp', request.url).toString())
 }
 
-function challenge(environment: McpAuthEnvironment, request: Request, status = 401, error = 'invalid_token') {
-  const resource = resourceUrl(environment, request)
-  const metadata = new URL(`/.well-known/oauth-protected-resource${resource.pathname}`, resource.origin)
-  return Response.json({ error }, {
-    status,
-    headers: { 'WWW-Authenticate': `Bearer resource_metadata="${metadata}"` },
-  })
+async function keysMatch(presented: string, expected: string) {
+  const encoder = new TextEncoder()
+  const [presentedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(presented)),
+    crypto.subtle.digest('SHA-256', encoder.encode(expected)),
+  ])
+  const left = new Uint8Array(presentedHash)
+  const right = new Uint8Array(expectedHash)
+  let difference = 0
+  for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index]
+  return difference === 0
+}
+
+function unauthorized() {
+  return Response.json(
+    { error: 'Unauthorized' },
+    { status: 401, headers: { 'Cache-Control': 'no-store' } },
+  )
 }
 
 export function validateMcpRequestOrigin(request: Request, environment: McpAuthEnvironment) {
@@ -57,83 +57,24 @@ export function validateMcpRequestOrigin(request: Request, environment: McpAuthE
   return null
 }
 
-export async function verifyAccessIdentity(
-  assertion: string | null,
+export async function authenticateMcpRequest(
+  request: Request,
   environment: McpAuthEnvironment,
-): Promise<AccessIdentity | null> {
-  if (!assertion || !environment.CF_ACCESS_TEAM_DOMAIN || !environment.CF_ACCESS_AUD || !environment.MCP_ALLOWED_SUBJECT) {
-    return null
-  }
-
-  const issuer = `https://${environment.CF_ACCESS_TEAM_DOMAIN}.cloudflareaccess.com`
-  let keySet = accessKeySets.get(issuer)
-  if (!keySet) {
-    keySet = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`))
-    accessKeySets.set(issuer, keySet)
-  }
-  try {
-    const { payload } = await jwtVerify(assertion, keySet, {
-      issuer,
-      audience: environment.CF_ACCESS_AUD,
-    })
-    if (payload.sub !== environment.MCP_ALLOWED_SUBJECT || typeof payload.exp !== 'number') return null
-    return {
-      subject: payload.sub,
-      clientId: typeof payload.client_id === 'string' ? payload.client_id : payload.sub,
-      expiresAt: payload.exp,
-    }
-  } catch {
-    return null
-  }
-}
-
-export async function authenticateMcpRequest(request: Request, environment: McpAuthEnvironment): Promise<AuthInfo | Response> {
-  const authorization = request.headers.get('Authorization')
-  const bearerToken = authorization?.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length)
-    : null
-  const resource = resourceUrl(environment, request)
-
-  if (environment.MCP_LOCAL_TOKEN) {
-    if (bearerToken !== environment.MCP_LOCAL_TOKEN) return challenge(environment, request)
-    return {
-      token: bearerToken,
-      clientId: 'lifeos-local-mcp',
-      scopes: ['training:read', 'routines:read'],
-      expiresAt: Math.floor(Date.now() / 1000) + 60 * 60,
-      resource,
-      extra: { subject: 'local-development' },
-    }
-  }
-
-  if (!environment.CF_ACCESS_TEAM_DOMAIN || !environment.CF_ACCESS_AUD || !environment.MCP_ALLOWED_SUBJECT) {
+): Promise<AuthInfo | Response> {
+  if (!environment.MCP_SHARED_KEY) {
     return Response.json({ error: 'MCP authentication is not configured' }, { status: 503 })
   }
-  const identity = await verifyAccessIdentity(
-    request.headers.get('Cf-Access-Jwt-Assertion') ?? bearerToken,
-    environment,
-  )
-  if (!identity) return challenge(environment, request)
-  return {
-    token: bearerToken ?? request.headers.get('Cf-Access-Jwt-Assertion')!,
-    clientId: identity.clientId,
-    scopes: ['training:read', 'routines:read'],
-    expiresAt: identity.expiresAt,
-    resource,
-    extra: { subject: identity.subject },
-  }
-}
 
-export function protectedResourceMetadata(request: Request, environment: McpAuthEnvironment) {
-  const resource = resourceUrl(environment, request)
-  const authorizationServer = environment.CF_ACCESS_TEAM_DOMAIN
-    ? `https://${environment.CF_ACCESS_TEAM_DOMAIN}.cloudflareaccess.com`
-    : resource.origin
-  return Response.json({
-    resource: resource.toString(),
-    authorization_servers: [authorizationServer],
-    scopes_supported: ['training:read', 'routines:read'],
-    bearer_methods_supported: ['header'],
-    resource_name: 'LifeOS Training MCP',
-  })
+  const presentedKeys = new URL(request.url).searchParams.getAll('key')
+  if (presentedKeys.length !== 1 || !await keysMatch(presentedKeys[0], environment.MCP_SHARED_KEY)) {
+    return unauthorized()
+  }
+
+  return {
+    token: 'shared-key-authenticated',
+    clientId: 'lifeos-owner',
+    scopes: ['training:read', 'routines:read'],
+    resource: resourceUrl(environment, request),
+    extra: { subject: 'lifeos-owner' },
+  }
 }

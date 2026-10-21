@@ -2,7 +2,7 @@ import { McpServer, createMcpHandler, type AuthInfo } from '@modelcontextprotoco
 import { z } from 'zod'
 import { buildExerciseProgress, buildRoutineReview, buildTrainingOverview, buildTrainingState } from '../training-analysis'
 import { loadTrainingDataset } from '../training-read-model'
-import { authenticateMcpRequest, protectedResourceMetadata, validateMcpRequestOrigin, type McpAuthEnvironment } from './auth'
+import { authenticateMcpRequest, validateMcpRequestOrigin, type McpAuthEnvironment } from './auth'
 
 export interface McpEnvironment extends McpAuthEnvironment {
   DB: D1Database
@@ -87,7 +87,7 @@ export function createLifeOsMcpServer(database: D1Database) {
   return server
 }
 
-export async function handleAuthorizedMcpRequest(
+async function handleAuthenticatedMcpRequest(
   request: Request,
   environment: McpEnvironment,
   authentication: AuthInfo,
@@ -104,11 +104,7 @@ export async function handleAuthorizedMcpRequest(
 }
 
 export async function handleMcpRequest(request: Request, environment: McpEnvironment) {
-  const resourcePath = new URL(environment.MCP_RESOURCE_URL ?? new URL('/mcp', request.url).toString()).pathname
-  if (request.method === 'GET' && new URL(request.url).pathname === `/.well-known/oauth-protected-resource${resourcePath}`) {
-    return protectedResourceMetadata(request, environment)
-  }
   const authentication = await authenticateMcpRequest(request, environment)
   if (authentication instanceof Response) return authentication
-  return handleAuthorizedMcpRequest(request, environment, authentication as AuthInfo)
+  return handleAuthenticatedMcpRequest(request, environment, authentication)
 }

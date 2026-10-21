@@ -116,7 +116,7 @@
 - Replaced per-set Epley/RPE progression outcomes with an exercise-level first-working-set signal: load and repetitions determine Progressed, Maintained, or Declined, while RPE appears as effort context and later sets remain neutral fatigue context.
 - Removed the progression RPE ceiling from routine configuration and synchronized storage; RPE 10 no longer blocks adding a repetition or advancing load after reaching the rep ceiling.
 - Added first-set targets and outcomes to active exercise cards, workout completion, saved workout detail, and exercise history.
-- Added an owner-scoped, read-only Streamable HTTP MCP endpoint with Cloudflare Access JWT authentication, host and origin validation, protected-resource metadata, methodology resources, and bounded training analytics tools.
+- Added a dedicated `lifeos-mcp` Cloudflare Worker with stateless Streamable HTTP transport, shared query-key authentication, DNS-rebinding defenses, structured MCP errors, and four bounded read-only analytics tools: `get_training_overview`, `get_exercise_progress`, `review_routine`, and `get_training_state`.
 - Added high-level MCP results for training overview, exercise progress, routine review, and non-diagnostic training-state context with freshness, confidence, missing-data, and evidence-boundary disclosures.
 - Added a local-first training profile with editable available-equipment and arbitrary excluded-exercise name lists.
 - Added a required subjective check-in before every newly started workout and stored it with that workout for synchronized history and later analysis.
@@ -125,4 +125,4 @@
 - Replaced explicit recovery slots with a routine-only FIFO cycle and configurable consecutive-training-day cadence; unscheduled days off reset the streak without consuming the next routine.
 - Added inferred rest-day guidance to Today while preserving the queued workout, including a deliberate train-anyway action that starts the queued routine.
 - Migrated local and synchronized cycle records by removing legacy rest slots, preserving the next routine, and storing the training-days-before-rest setting.
-- Replaced Cloudflare Access Managed OAuth at the MCP protocol seam with a Gemini-compatible OAuth 2.1 module in the existing LifeOS Worker, while retaining Cloudflare Access owner authentication on the authorization page and enforcing owner, audience, PKCE, scope, host, and origin checks.
+- Simplified MCP client compatibility to a single rotatable Worker secret supplied through the endpoint’s `key` query parameter, while keeping the LifeOS application and synchronization endpoint protected by Cloudflare Access.
