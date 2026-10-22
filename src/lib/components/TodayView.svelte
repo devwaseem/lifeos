@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { ArrowRight, CalendarDays, Dumbbell, Layers3, Moon, Repeat2, ShieldAlert } from '@lucide/svelte'
+  import { ArrowRight, CalendarDays, CheckCircle2, Dumbbell, Layers3, Moon, Repeat2, ShieldAlert } from '@lucide/svelte'
   import type { AiSettings } from '$lib/ai-coach'
   import { getCurrentCycleSlot, getCycleRoutine, getTrainingCycleState } from '$lib/training-cycle'
-  import { getTrainingReadiness } from '$lib/training-readiness'
+  import { getTrainingReadiness, type MuscleRecovery } from '$lib/training-readiness'
   import type { TrainingProgressReport as TrainingProgressReportData } from '$lib/training-progress-report'
   import type { RoutineTemplate, TrainingCycle, WorkoutSession } from '$lib/types'
-  import { getCompletedSetCount } from '$lib/utils'
+  import { formatVolume, getCompletedSetCount, getWorkoutVolume } from '$lib/utils'
+  import SegmentedProgressBar from './SegmentedProgressBar.svelte'
   import TrainingProgressReport from './TrainingProgressReport.svelte'
   import WorkoutCalendar from './WorkoutCalendar.svelte'
   export let workouts: WorkoutSession[]
@@ -40,32 +41,39 @@
   $: cycleRoutine = getCycleRoutine(trainingCycle, routines)
   $: cycleState = getTrainingCycleState(trainingCycle, workouts, now)
   $: cycleActive = Boolean(trainingCycle && !trainingCycle.deletedAt && trainingCycle.slots.length > 0)
-  $: restDay = !activeWorkout && cycleState.restDue
+  $: todayCompleted = !activeWorkout && cycleState.trainedToday
+  $: latestTodayWorkout = todayCompleted ? getLatestWorkoutToday(workouts, now) : undefined
+  $: restDay = !activeWorkout && !todayCompleted && cycleState.restDue
   $: cycleNeedsAttention = Boolean(cycleSlot && !cycleRoutine)
   $: plannedRoutine = cycleActive ? cycleRoutine : selectedRoutine
-  $: planMovements = activeWorkout?.exercises ?? (restDay ? [] : plannedRoutine?.exercises ?? [])
-  $: planName = activeWorkout?.title ?? (restDay ? 'Recovery day' : plannedRoutine?.name ?? (cycleNeedsAttention ? 'Cycle needs attention' : 'Choose today’s workout'))
+  $: planMovements = activeWorkout?.exercises ?? (todayCompleted ? latestTodayWorkout?.exercises ?? [] : restDay ? [] : plannedRoutine?.exercises ?? [])
+  $: planName = activeWorkout?.title ?? (todayCompleted ? latestTodayWorkout?.title ?? 'Training complete' : restDay ? 'Recovery day' : plannedRoutine?.name ?? (cycleNeedsAttention ? 'Cycle needs attention' : 'Choose today’s workout'))
   $: insights = getTrainingReadiness(planMovements, workouts, now)
-  $: fatigueOverrideRequired = !cycleActive && insights.systemicFatigueWarning
+  $: fatigueOverrideRequired = !todayCompleted && !cycleActive && insights.systemicFatigueWarning
+  $: restrictedMuscleCount = insights.recovery.filter((recovery) => recovery.readiness < 80).length
   $: cyclePosition = cycleActive && trainingCycle ? `Cycle ${trainingCycle.currentIndex + 1} / ${trainingCycle.slots.length}` : ''
   $: primaryEyebrow = activeWorkout
     ? 'Session active'
-    : restDay
-      ? `${cycleState.consecutiveTrainingDays} of ${cycleState.trainingDaysBeforeRest} training days`
-      : cycleNeedsAttention
-        ? 'Routine unavailable'
-        : fatigueOverrideRequired
-          ? 'Override required'
-          : cyclePosition || (plannedRoutine ? 'Ready when you are' : 'No plan selected')
+    : todayCompleted
+      ? 'Session complete'
+      : restDay
+        ? `${cycleState.consecutiveTrainingDays} of ${cycleState.trainingDaysBeforeRest} training days`
+        : cycleNeedsAttention
+          ? 'Routine unavailable'
+          : fatigueOverrideRequired
+            ? 'Override required'
+            : cyclePosition || (plannedRoutine ? 'Ready when you are' : 'No plan selected')
   $: primaryLabel = activeWorkout
     ? `Resume ${activeWorkout.title}`
-    : restDay
-      ? 'Rest today'
-      : cycleNeedsAttention
-        ? 'Repair training cycle'
-        : plannedRoutine
-          ? `Start ${plannedRoutine.name}`
-          : 'Choose workout'
+    : todayCompleted
+      ? 'Today’s training is complete'
+      : restDay
+        ? 'Rest today'
+        : cycleNeedsAttention
+          ? 'Repair training cycle'
+          : plannedRoutine
+            ? `Start ${plannedRoutine.name}`
+            : 'Choose workout'
 
   $: currentDate = new Date(now)
   $: currentDateKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}-${currentDate.getDate()}`
@@ -73,6 +81,39 @@
   $: greeting = currentDate.getHours() < 12 ? 'Good morning,' : currentDate.getHours() < 18 ? 'Good afternoon,' : 'Good evening,'
   $: activeSetCount = activeWorkout ? getCompletedSetCount(activeWorkout) : 0
   $: activeSetLabel = `${activeSetCount} ${activeSetCount === 1 ? 'set' : 'sets'}`
+  $: completedSetCount = latestTodayWorkout ? getCompletedSetCount(latestTodayWorkout) : 0
+
+  function dateKey(timestamp: string | number) {
+    const date = new Date(timestamp)
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+  }
+
+  function getLatestWorkoutToday(items: WorkoutSession[], timestamp: number) {
+    const today = dateKey(timestamp)
+    let latest: WorkoutSession | undefined
+    for (const workout of items) {
+      if (workout.status !== 'completed' || dateKey(workout.completedAt ?? workout.startedAt) !== today) continue
+      if (!latest || (workout.completedAt ?? workout.startedAt) > (latest.completedAt ?? latest.startedAt)) latest = workout
+    }
+    return latest
+  }
+
+  function recoveryStatusLabel(recovery: MuscleRecovery) {
+    if (recovery.status === 'fully-recovered') return 'No residual estimate'
+    if (recovery.status === 'ready') return 'Ready estimate'
+    if (recovery.status === 'partial') return 'Partial estimate'
+    return 'Recent load'
+  }
+
+  function recoveryTiming(recovery: MuscleRecovery) {
+    if (recovery.elapsedHours === null) return 'No prior load'
+    if (recovery.hoursUntilReady === 0) return 'At readiness threshold'
+    return `~${recovery.hoursUntilReady}h to ready`
+  }
+
+  function formatStimulusUnits(value: number) {
+    return Number.isInteger(value) ? String(value) : value.toFixed(1)
+  }
 
   function updateDateHeader(date: Date, dateKey: string) {
     headerDateKey = dateKey
@@ -142,6 +183,8 @@
         <span>{greeting}</span>{' '}<span class="font-medium text-ink">Waseem Akram.</span>
         {#if activeWorkout}
           {' '}Your{' '}<Dumbbell class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">{activeWorkout.title}</span>{' '}workout is underway with{' '}<span class="font-semibold text-ink">{activeSetLabel}</span>{' '}logged.
+        {:else if todayCompleted}
+          {' '}Today’s training is complete.{' '}<CheckCircle2 class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-success" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">{latestTodayWorkout?.title ?? 'Your workout'}</span>{' '}is safely logged with{' '}<span class="font-semibold text-ink">{completedSetCount} completed {completedSetCount === 1 ? 'set' : 'sets'}.</span>{#if plannedRoutine}{' '}<span class="font-medium text-ink">{plannedRoutine.name}</span>{' '}stays queued for next time.{/if}
         {:else if restDay}
           {' '}You’ve completed{' '}<CalendarDays class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-semibold text-ink">{cycleState.consecutiveTrainingDays} consecutive training days.</span>{' '}Rest today; the queue keeps{' '}<Dumbbell class="mr-[0.22em] inline size-[0.72em] align-[-0.08em] text-ink" strokeWidth={2.3} aria-hidden="true" /><span class="font-medium text-ink">{plannedRoutine?.name ?? 'your next routine'}</span>{' '}next.
         {:else if cycleNeedsAttention}
@@ -161,6 +204,8 @@
         <div class="min-w-0"><p class="font-dot text-xs text-accent">TODAY</p><h1 id="today-plan-heading" class="mt-2 truncate text-3xl font-medium leading-none sm:text-4xl">{planName}</h1></div>
         {#if activeWorkout}
           <span class="shrink-0 rounded-full bg-ink px-3 py-1.5 text-[0.625rem] font-medium uppercase text-paper">In progress</span>
+        {:else if todayCompleted}
+          <span class="shrink-0 rounded-full bg-success-soft px-3 py-1.5 text-[0.625rem] font-medium uppercase text-success">Completed</span>
         {:else if cycleActive && trainingCycle}
           <span class="shrink-0 rounded-full bg-canvas px-3 py-1.5 text-[0.625rem] font-medium uppercase text-muted">{cyclePosition}</span>
         {:else if routines.length > 0}
@@ -168,7 +213,12 @@
         {/if}
       </div>
 
-      {#if restDay}
+      {#if todayCompleted}
+        <div class="mt-8 grid grid-cols-2 divide-x divide-rule border-b border-rule pb-5">
+          <div class="pr-4"><span class="font-dot block text-5xl leading-none tabular-nums">{completedSetCount}</span><span class="mt-2 block text-xs uppercase text-muted">Completed sets</span></div>
+          <div class="pl-4"><span class="font-dot block text-5xl leading-none tabular-nums">{formatVolume(latestTodayWorkout ? getWorkoutVolume(latestTodayWorkout) : 0)}</span><span class="mt-2 block text-xs uppercase text-muted">Volume · kg</span></div>
+        </div>
+      {:else if restDay}
         <div class="mt-8 flex items-end justify-between gap-5 border-b border-rule pb-6">
           <div><span class="font-dot block text-6xl leading-none">REST</span><span class="mt-2 block text-xs uppercase text-muted">Inferred from your training streak</span></div>
           <span class="grid size-14 shrink-0 place-items-center rounded-full bg-canvas"><Moon class="size-6" /></span>
@@ -195,7 +245,11 @@
       {/if}
 
       <div class="mt-auto pt-6">
-        {#if restDay}
+        {#if todayCompleted}
+          <div class="flex min-h-16 w-full items-center justify-between gap-4 rounded-xl bg-success-soft px-5 text-left text-success" role="status">
+            <span><span class="block text-[0.625rem] font-medium uppercase opacity-70">{primaryEyebrow}</span><span class="mt-1 block text-lg font-medium">{primaryLabel}</span></span><CheckCircle2 class="size-5 shrink-0" />
+          </div>
+        {:else if restDay}
           <div class="flex min-h-16 w-full items-center justify-between gap-4 rounded-xl bg-ink px-5 text-left text-paper" role="status">
             <span><span class="block text-[0.625rem] font-medium uppercase opacity-70">{primaryEyebrow}</span><span class="mt-1 block text-lg font-medium">{primaryLabel}</span></span><Moon class="size-5 shrink-0" />
           </div>
@@ -212,6 +266,51 @@
     </section>
 
     <WorkoutCalendar {workouts} {routines} {now} />
+
+    <section class="col-span-2 rounded-2xl bg-paper p-5 sm:p-6 lg:col-span-12" aria-labelledby="recovery-heading">
+      <div class="flex items-start justify-between gap-4">
+        <div><p class="font-dot text-xs text-accent">RECOVERY</p><h2 id="recovery-heading" class="mt-1 text-xl font-medium">Muscle readiness</h2></div>
+        <div class="shrink-0 text-right">
+          {#if restrictedMuscleCount > 0}
+            <p><span class="font-dot text-2xl tabular-nums">{restrictedMuscleCount}</span><span class="ml-1 text-[0.625rem] font-medium uppercase text-muted">below threshold</span></p>
+          {:else}
+            <p class="font-dot text-sm text-success">ESTIMATED READY</p>
+          {/if}
+          <span class:confidence-high={insights.recoveryConfidence.level === 'high'} class="mt-1 inline-block rounded-full bg-canvas px-2.5 py-1 text-[0.5625rem] font-medium uppercase text-muted">{insights.recoveryConfidence.label}</span>
+        </div>
+      </div>
+
+      {#if insights.recovery.length > 0}
+        <div class="mt-5 grid grid-cols-2 overflow-hidden border-t border-rule lg:grid-cols-3">
+          {#each insights.recovery as recovery (recovery.muscle)}
+            <article class="recovery-cell min-w-0 bg-paper p-4">
+              <h3 class="text-sm font-medium">{recovery.muscle}</h3>
+              <div class="mt-2 flex items-end justify-between gap-2">
+                <p class:recovery-low={recovery.status === 'recover'} class="text-[0.5625rem] font-medium uppercase text-muted">{recoveryStatusLabel(recovery)}</p>
+                <span class="font-dot shrink-0 text-2xl leading-none tabular-nums">{recovery.readiness}%</span>
+              </div>
+              <div class="mt-4">
+                <SegmentedProgressBar
+                  value={recovery.readiness}
+                  tone={recovery.status === 'recover' ? 'danger' : 'default'}
+                  ariaLabel={`${recovery.muscle} estimated readiness is ${recovery.readiness}% across a ${recovery.recoveryWindowHours}-hour heuristic window`}
+                />
+              </div>
+              <div class="mt-2 flex items-start justify-between gap-2 text-[0.625rem] leading-4 text-muted">
+                <span>{recovery.elapsedHours === null ? 'No prior load' : `${recovery.elapsedHours}h elapsed`}</span>
+                <span class="shrink-0 text-right">{recoveryTiming(recovery)}</span>
+              </div>
+              {#if recovery.lastStimulusUnits !== null}
+                <p class="mt-2 text-[0.625rem] leading-4 text-muted">Last session: {formatStimulusUnits(recovery.lastStimulusUnits)} modeled set units · {recovery.recoveryWindowHours}h decay</p>
+              {/if}
+            </article>
+          {/each}
+        </div>
+        <p class="mt-3 text-xs leading-5 text-muted">{insights.recoveryConfidence.reason} Readiness is a modeled estimate from completed-set effort, muscle contribution, and fixed decay windows.</p>
+      {:else}
+        <div class="mt-6 border-t border-rule py-8 text-sm leading-6 text-muted">Complete a set to begin estimating muscle readiness.</div>
+      {/if}
+    </section>
     <div class="col-span-2 lg:col-span-12">
       <TrainingProgressReport
         compact
@@ -232,6 +331,14 @@
   }
 
   .fatigue-action { background: var(--color-danger); color: var(--color-danger-ink); }
+  .confidence-high { background: var(--color-success-soft); color: var(--color-success); }
+  .recovery-low { color: var(--color-danger); }
+  .recovery-cell { border-right: 1px solid var(--color-rule); border-bottom: 1px solid var(--color-rule); }
+  .recovery-cell:nth-child(2n) { border-right: 0; }
+  @media (min-width: 64rem) {
+    .recovery-cell:nth-child(2n) { border-right: 1px solid var(--color-rule); }
+    .recovery-cell:nth-child(3n) { border-right: 0; }
+  }
   .override-reveal { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; pointer-events: none; transition: grid-template-rows 220ms cubic-bezier(0.25, 1, 0.5, 1), opacity 160ms ease-out, visibility 0s 220ms; }
   .override-reveal > div { min-height: 0; overflow: hidden; }
   .override-reveal.open { grid-template-rows: 1fr; opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }

@@ -53,7 +53,7 @@ LifeOS accepts only `6`, `7`, `7.5`, `8`, `8.5`, `9`, `9.5`, and `10` for set an
 estimated_RIR = clamp(10 − set_RPE, 0, 4)
 ```
 
-Warmup sets are explicitly marked, show RPE as not applicable without exposing the picker, and are excluded from working-set counts, volume, records, progression targets, readiness, muscle dose, and strength estimates. Their stored RPE is always `null`.
+Warmup sets are explicitly marked, show RPE as not applicable without exposing the picker, and are excluded from working-set counts, volume, records, progression targets, readiness, muscle dose, and strength estimates. Their stored RPE is always `null`. Active-workout volume also excludes incomplete sets, so values prefilled from history do not count until the user completes those sets.
 
 Each routine exercise stores a minimum and maximum repetition target plus an optional fixed load increment. Equipment settings stores one optional exact list of available loads in kilograms for each equipment type, such as Dumbbells, Cable, Machine, or Barbell. When a workout starts, the matching equipment rack is copied into every exercise in that workout so later settings changes cannot rewrite the target that was prescribed for the saved session. Each warmup and working set is prefilled from the matching set in the latest completed same-exercise session, including load, repetitions, and working-set RPE; if the new routine has more working sets, the final known working set is repeated.
 
@@ -71,8 +71,8 @@ The exercise-level progression outcome compares only the completed first non-war
 
 - At the same external load, more repetitions means **Progressed**, equal repetitions means **Maintained**, and fewer repetitions means **Declined**.
 - Bodyweight sets treat missing and zero external load as equivalent.
-- A prescribed load increase completed at or above the configured minimum repetitions means **Progressed**.
-- A missing prior session means **Baseline logged**. Missing repetitions, an incomplete first set, or an unplanned load change does not fabricate a comparison.
+- Any increase in completed first-set external load means **Progressed**. The calculated target remains a suggestion, not a restriction on valid progression.
+- A missing prior session means **Baseline logged**. Missing repetitions or an incomplete first set keeps the result pending; a lower external load is not directly comparable.
 
 RPE explains the first-set result but never changes its status. Equal RPE is labeled same effort; a difference of at least one full RPE point is labeled lower or higher effort. A half-point difference remains visible in the logged values without receiving an effort label. Later sets retain their load, repetitions, RPE, and previous-session reference as fatigue and work-capacity context, but they never override the exercise-level outcome.
 

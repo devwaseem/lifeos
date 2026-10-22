@@ -24,9 +24,10 @@
   import { createOneOffWorkout, createWorkoutFromRoutine, routineFromWorkout } from '$lib/routines'
   import { deleteAppleHealthExport, deleteExerciseVideo, getAiSettings, getAppleHealthExports, getCustomExercises, getEquipmentSettings, getExerciseVideos, getRoutines, getSyncSettings, getTrainingCycle, getTrainingProfile, getWorkouts, replaceEquipmentSettings, replaceRoutines, replaceTrainingCycle, replaceTrainingProfile, replaceWorkouts, saveAiSettings, saveAppleHealthExport, saveCustomExercise, saveEquipmentSettings, saveExerciseVideo, saveRoutine, saveSyncSettings, saveTrainingCycle, saveTrainingProfile, saveWorkout } from '$lib/storage'
   import { mergeEquipmentSettings, mergeRoutines, mergeTrainingCycle, mergeTrainingProfile, mergeWorkouts, syncData } from '$lib/sync'
-  import { advanceTrainingCycleForWorkout, removeRoutineFromTrainingCycle } from '$lib/training-cycle'
+  import { advanceTrainingCycleForWorkout, reconcileTrainingCycleAfterDeletedWorkouts, removeRoutineFromTrainingCycle, rewindTrainingCycleForDeletedWorkout } from '$lib/training-cycle'
   import { buildTrainingProgressReport } from '$lib/training-progress-report'
   import { getConsecutiveLoadDays } from '$lib/training-readiness'
+  import { getWorkoutVolumeComparison, type WorkoutVolumeComparison } from '$lib/utils'
   import type { AppView, EquipmentSettings, ExerciseDefinition, ExerciseVideo, RoutineTemplate, SyncSettings, TrainingCycle, TrainingProfile, WorkoutCheckIn, WorkoutFinishDecision, WorkoutSession } from '$lib/types'
 
   let view: AppView = 'today'
@@ -53,6 +54,7 @@
   let canExportToAppleHealth = false
   let appleHealthActionError: string | null = null
   let completedWorkoutForHealth: WorkoutSession | null = null
+  let completedWorkoutVolumeComparison: WorkoutVolumeComparison | null = null
   let startDialog: WorkoutStartDialog
   let fatigueDialog: ConfirmDialog
   let workoutCompleteDialog: WorkoutCompleteDialog
@@ -383,10 +385,13 @@
           : import.meta.env.DEV
             ? hydratedDemos
             : []
+        const initialTrainingCycle = storedTrainingCycle
+          ? reconcileTrainingCycleAfterDeletedWorkouts(storedTrainingCycle, initialWorkouts)
+          : null
 
         workouts = initialWorkouts
         routines = storedRoutines
-        trainingCycle = storedTrainingCycle
+        trainingCycle = initialTrainingCycle
         selectedRoutineId = readStoredRoutineId()
         ensureSelectedRoutine(storedRoutines)
         settings = storedSettings
@@ -396,13 +401,19 @@
         trainingProfile = storedTrainingProfile
         equipmentSettings = storedEquipmentSettings
         aiSettings = storedAiSettings
+        if (storedTrainingCycle && initialTrainingCycle
+          && (initialTrainingCycle.currentIndex !== storedTrainingCycle.currentIndex
+            || initialTrainingCycle.updatedAt !== storedTrainingCycle.updatedAt)) {
+          await replaceTrainingCycle(initialTrainingCycle)
+        }
+
 
         if (canSync) {
           const synced = await performSync(
             storedSettings,
             shouldPullDevelopmentData ? [] : storedUserWorkouts,
             shouldPullDevelopmentData ? [] : storedRoutines,
-            shouldPullDevelopmentData ? null : storedTrainingCycle,
+            shouldPullDevelopmentData ? null : initialTrainingCycle,
             shouldPullDevelopmentData ? null : storedTrainingProfile,
             shouldPullDevelopmentData ? null : storedEquipmentSettings,
             !shouldPullDevelopmentData,
@@ -410,7 +421,7 @@
           if (!synced && !cancelled) {
             workouts = initialWorkouts
             routines = storedRoutines
-            trainingCycle = storedTrainingCycle
+            trainingCycle = initialTrainingCycle
             trainingProfile = storedTrainingProfile
             ensureSelectedRoutine(storedRoutines)
             equipmentSettings = storedEquipmentSettings
@@ -495,7 +506,10 @@
       )
       const mergedWorkouts = mergeWorkouts(mergeLocalData ? nextWorkouts : [], response.workouts)
       const mergedRoutines = mergeRoutines(mergeLocalData ? nextRoutines : [], response.routines)
-      const mergedTrainingCycle = mergeTrainingCycle(mergeLocalData ? nextTrainingCycle : null, response.trainingCycle ?? null)
+      const mergedCycle = mergeTrainingCycle(mergeLocalData ? nextTrainingCycle : null, response.trainingCycle ?? null)
+      const mergedTrainingCycle = mergedCycle
+        ? reconcileTrainingCycleAfterDeletedWorkouts(mergedCycle, mergedWorkouts)
+        : null
       const mergedTrainingProfile = mergeTrainingProfile(mergeLocalData ? nextTrainingProfile : null, response.profile ?? null)
       const mergedEquipmentSettings = mergeEquipmentSettings(mergeLocalData ? nextEquipmentSettings : null, response.equipmentSettings ?? null)
       const updatedSettings = { ...nextSettings, lastSyncedAt: response.syncedAt, syncCursor: response.cursor }
@@ -675,13 +689,22 @@
       exercises: [],
     }
     const nextWorkouts = workouts.map((workout) => workout.id === deleted.id ? deleted : workout)
+    let nextTrainingCycle = trainingCycle
+    if (trainingCycle) {
+      const rewound = rewindTrainingCycleForDeletedWorkout(trainingCycle, selectedWorkout, workouts, timestamp)
+      if (rewound.updatedAt === timestamp) {
+        nextTrainingCycle = rewound
+        trainingCycle = rewound
+        saveTrainingCycle(rewound).catch(() => { dataError = 'The training cycle could not return to the deleted workout.' })
+      }
+    }
     workouts = nextWorkouts
     selectedWorkoutId = ''
     saveWorkout(deleted).catch(() => { dataError = 'The deleted workout could not be saved locally.' })
     appleHealthExports = appleHealthExports.filter((record) => record.workoutId !== deleted.id)
     deleteAppleHealthExport(deleted.id).catch(() => { dataError = 'The Apple Health export state could not be removed locally.' })
     navigateBack('history')
-    if (navigator.onLine) void performSync(settings, nextWorkouts, routines)
+    if (navigator.onLine) void performSync(settings, nextWorkouts, routines, nextTrainingCycle)
   }
 
   function storeRoutine(routine: RoutineTemplate) {
@@ -740,6 +763,7 @@
   function finishWorkout(decision: WorkoutFinishDecision) {
     if (!activeWorkout) return
     const timestamp = new Date().toISOString()
+    const volumeComparison = getWorkoutVolumeComparison(activeWorkout, workouts)
     let nextRoutines = routines
     let routineId = activeWorkout.routineId
     let routineToSave: RoutineTemplate | undefined
@@ -797,6 +821,7 @@
           appleHealthActionError = 'The Apple Health reminder could not be saved, but you can still export this workout now.'
         }
         completedWorkoutForHealth = completed
+        completedWorkoutVolumeComparison = volumeComparison
         await tick()
         workoutCompleteDialog.open()
       })
@@ -859,7 +884,7 @@
 <WorkoutStartDialog bind:this={startDialog} routines={visibleRoutines} onSelectRoutine={requestRoutineStart} onCustom={startCustomWorkout} onManageRoutines={() => navigate('routines')} />
 <WorkoutCheckInDialog bind:this={checkInDialog} onSubmit={startCheckedInWorkout} onCancel={() => { pendingWorkoutStart = null }} />
 <ConfirmDialog bind:this={fatigueDialog} eyebrow="Heuristic governor" title="Systemic fatigue warning" description="Three or more consecutive training days are logged. Continue only if this additional load is intentional and recovery is adequate." confirmLabel="Force override" onConfirm={() => startCustomWorkout(true)} />
-<WorkoutCompleteDialog bind:this={workoutCompleteDialog} workout={completedWorkoutForHealth} canExport={canExportToAppleHealth} error={appleHealthActionError} onExport={exportWorkoutToAppleHealth} />
+<WorkoutCompleteDialog bind:this={workoutCompleteDialog} workout={completedWorkoutForHealth} volumeComparison={completedWorkoutVolumeComparison} canExport={canExportToAppleHealth} error={appleHealthActionError} onExport={exportWorkoutToAppleHealth} />
 
 <style>
   .page-stack {

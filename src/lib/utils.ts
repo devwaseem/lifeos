@@ -43,13 +43,49 @@ export function getWorkoutVolume(workout: WorkoutSession) {
 }
 
 export function getLiveWorkoutVolume(workout: WorkoutSession) {
-  return workout.exercises.reduce(
-    (total, exercise) => total + exercise.sets.reduce(
-      (sum, set) => set.warmup ? sum : sum + (set.weight ?? 0) * (set.reps ?? 0),
-      0,
-    ),
-    0,
-  )
+  return getWorkoutVolume(workout)
+}
+export interface WorkoutVolumeComparison {
+  currentVolume: number
+  previousVolume: number | null
+  delta: number | null
+  percentChange: number | null
+  direction: 'up' | 'down' | 'same' | 'baseline'
+}
+
+function hasComparablePlan(current: WorkoutSession, candidate: WorkoutSession) {
+  if (current.routineId) return candidate.routineId === current.routineId
+  if (candidate.routineId || candidate.exercises.length !== current.exercises.length) return false
+  return current.exercises.every((exercise, index) => candidate.exercises[index]?.exerciseId === exercise.exerciseId)
+}
+
+export function getWorkoutVolumeComparison(current: WorkoutSession, workouts: WorkoutSession[]): WorkoutVolumeComparison {
+  const currentTime = new Date(current.completedAt ?? current.startedAt).getTime()
+  let previous: WorkoutSession | null = null
+  let previousTime = Number.NEGATIVE_INFINITY
+
+  for (const candidate of workouts) {
+    if (candidate.id === current.id || candidate.status !== 'completed' || !hasComparablePlan(current, candidate)) continue
+    const candidateTime = new Date(candidate.completedAt ?? candidate.startedAt).getTime()
+    if (!Number.isFinite(candidateTime) || candidateTime >= currentTime || candidateTime <= previousTime) continue
+    previous = candidate
+    previousTime = candidateTime
+  }
+
+  const currentVolume = getWorkoutVolume(current)
+  if (!previous) {
+    return { currentVolume, previousVolume: null, delta: null, percentChange: null, direction: 'baseline' }
+  }
+
+  const previousVolume = getWorkoutVolume(previous)
+  const delta = currentVolume - previousVolume
+  return {
+    currentVolume,
+    previousVolume,
+    delta,
+    percentChange: previousVolume > 0 ? Math.round((delta / previousVolume) * 1_000) / 10 : null,
+    direction: delta > 0 ? 'up' : delta < 0 ? 'down' : 'same',
+  }
 }
 
 export function getWorkoutSetCount(workout: WorkoutSession) {

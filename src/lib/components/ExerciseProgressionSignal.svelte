@@ -77,7 +77,7 @@
     {:else if result.status === 'baseline'}
       <p class="mt-2 text-sm text-muted">This first working set starts the comparison history.</p>
     {:else if result.status === 'not-comparable'}
-      <p class="mt-2 text-sm text-muted">The load changed outside the planned target.</p>
+      <p class="mt-2 text-sm text-muted">The load changed, so reps are not directly comparable.</p>
     {:else}
       <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm tabular-nums">
         <span>{previousPerformance}</span><ArrowRight class="size-4 shrink-0 text-muted" /><span class="font-medium">{currentPerformance}</span>

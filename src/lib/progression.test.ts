@@ -267,13 +267,13 @@ describe('first-set exercise progression', () => {
     })
   })
 
-  it('does not fabricate a comparison for an unplanned load change', () => {
+  it('treats any completed load increase as progression instead of restricting it to the calculated target', () => {
     const previous = workout('previous', '2026-10-19T08:00:00.000Z', 8, 7)
     const current = workout('current', '2026-10-20T08:00:00.000Z', 8, 7)
     current.exercises[0].sets[0].weight = 85
 
     expect(buildExerciseProgressionResults(current, [current, previous]).get('current-bench')).toMatchObject({
-      status: 'not-comparable',
+      status: 'progressed',
       repDelta: null,
     })
   })

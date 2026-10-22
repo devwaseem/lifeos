@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { Check, HeartPulse, X } from '@lucide/svelte'
+  import { Check, HeartPulse, Minus, TrendingDown, TrendingUp, X } from '@lucide/svelte'
   import type { WorkoutSession } from '$lib/types'
-  import { formatDuration } from '$lib/utils'
+  import { formatDuration, formatVolume, type WorkoutVolumeComparison } from '$lib/utils'
 
   export let workout: WorkoutSession | null = null
+  export let volumeComparison: WorkoutVolumeComparison | null = null
   export let canExport = false
   export let error: string | null = null
   export let onExport: (workout: WorkoutSession) => Promise<boolean>
@@ -27,6 +28,14 @@
     exporting = false
     if (launched) close()
   }
+
+  function volumeTrendLabel(comparison: WorkoutVolumeComparison) {
+    if (comparison.previousVolume === null || comparison.delta === null) return 'First comparable session'
+    if (comparison.direction === 'same') return 'Same volume as last time'
+    const sign = comparison.direction === 'up' ? '+' : '−'
+    const percent = comparison.percentChange === null ? '' : ` · ${sign}${Math.abs(comparison.percentChange)}%`
+    return `${sign}${formatVolume(Math.abs(comparison.delta))} kg${percent} vs last time`
+  }
 </script>
 
 <dialog bind:this={dialog} class="fixed inset-x-0 bottom-0 top-auto z-40 m-0 w-full max-w-none rounded-t-2xl border-0 bg-paper p-0 text-ink backdrop:bg-ink/35 sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[min(28rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl">
@@ -44,6 +53,21 @@
         <span class="grid size-10 shrink-0 place-items-center rounded-full bg-success-soft text-success"><Check class="size-5" /></span>
         <span class="min-w-0"><span class="block truncate text-sm font-medium">{workout.title}</span><span class="mt-0.5 block text-xs text-muted">{formatDuration(workout.startedAt, workout.completedAt)} · safely stored in LifeOS</span></span>
       </div>
+    {/if}
+
+    {#if volumeComparison}
+      <section class="mt-3 rounded-xl bg-canvas p-4" aria-label="Session volume comparison">
+        <div class="flex items-end justify-between gap-4">
+          <div><p class="text-[0.625rem] font-medium uppercase text-muted">Session volume</p><p class="font-dot mt-1 text-3xl tabular-nums">{formatVolume(volumeComparison.currentVolume)}<span class="font-sans ml-1 text-xs text-muted">kg</span></p></div>
+          <span class:text-success={volumeComparison.direction === 'up'} class:text-danger={volumeComparison.direction === 'down'} class="flex items-center gap-1 text-right text-xs font-medium text-muted">
+            {#if volumeComparison.direction === 'up'}<TrendingUp class="size-4" />
+            {:else if volumeComparison.direction === 'down'}<TrendingDown class="size-4" />
+            {:else}<Minus class="size-4" />{/if}
+            {volumeTrendLabel(volumeComparison)}
+          </span>
+        </div>
+        {#if volumeComparison.previousVolume !== null}<p class="mt-2 text-xs text-muted">Previous comparable session: {formatVolume(volumeComparison.previousVolume)} kg.</p>{/if}
+      </section>
     {/if}
 
     <p class="mt-5 text-sm leading-6 text-muted text-pretty">Your shortcut will add this session as a Traditional Strength Training workout. Sets, load, and RPE stay in LifeOS.</p>

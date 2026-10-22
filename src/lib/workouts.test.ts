@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkoutSession } from './types'
-import { getCompletedSetCount, getLiveWorkoutVolume, getWorkoutSetCount } from './utils'
+import { getCompletedSetCount, getLiveWorkoutVolume, getWorkoutSetCount, getWorkoutVolumeComparison } from './utils'
 import { normalizeWorkout } from './workouts'
 
 function workoutWithSets(sets: unknown[]): WorkoutSession {
@@ -59,10 +59,43 @@ describe('working-set totals', () => {
     const workout = normalizeWorkout(workoutWithSets([
       { id: 'warmup', weight: 20, reps: 10, rpe: null, completed: true, completedAt: null, warmup: true, notes: '' },
       { id: 'working', weight: 80, reps: 8, rpe: 8, completed: true, completedAt: null, warmup: false, notes: '' },
+      { id: 'prefilled', weight: 80, reps: 8, rpe: null, completed: false, completedAt: null, warmup: false, notes: '' },
     ]))
 
-    expect(getWorkoutSetCount(workout)).toBe(1)
+    expect(getWorkoutSetCount(workout)).toBe(2)
     expect(getCompletedSetCount(workout)).toBe(1)
     expect(getLiveWorkoutVolume(workout)).toBe(640)
+  })
+
+  it('compares completed volume with the latest completed session for the same routine', () => {
+    const completedSet = (id: string, weight: number) => ({
+      id,
+      weight,
+      reps: 8,
+      rpe: 8,
+      completed: true,
+      completedAt: null,
+      warmup: false,
+      notes: '',
+    })
+    const previous = workoutWithSets([completedSet('previous-set', 70)])
+    previous.id = 'previous'
+    previous.routineId = 'push'
+    previous.status = 'completed'
+    previous.startedAt = '2026-10-19T08:00:00.000Z'
+    previous.completedAt = '2026-10-19T09:00:00.000Z'
+    const current = workoutWithSets([completedSet('current-set', 80)])
+    current.id = 'current'
+    current.routineId = 'push'
+    current.status = 'completed'
+    current.completedAt = '2026-10-20T09:00:00.000Z'
+
+    expect(getWorkoutVolumeComparison(current, [current, previous])).toEqual({
+      currentVolume: 640,
+      previousVolume: 560,
+      delta: 80,
+      percentChange: 14.3,
+      direction: 'up',
+    })
   })
 })

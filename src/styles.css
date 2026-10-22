@@ -37,6 +37,7 @@
 
 html {
   background: var(--color-canvas);
+  touch-action: manipulation;
 }
 
 body {

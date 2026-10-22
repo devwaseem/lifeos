@@ -256,14 +256,11 @@ function getExerciseProgressionResult(
       repDelta,
     }
   }
-  const completedPlannedIncrease = target?.action === 'increase-load'
-    && target.targetWeight !== null
-    && currentSet.weight !== null
-    && Math.abs(currentSet.weight - target.targetWeight) < 0.01
-    && currentSet.reps >= target.rule.minReps
+  const increasedLoad = currentSet.weight !== null
+    && (previousSet.weight === null || currentSet.weight > previousSet.weight + 0.01)
   return {
     ...base,
-    status: completedPlannedIncrease ? 'progressed' : 'not-comparable',
+    status: increasedLoad ? 'progressed' : 'not-comparable',
     repDelta: null,
   }
 }

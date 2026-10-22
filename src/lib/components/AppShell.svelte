@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Activity, CalendarDays, CircleGauge, Cloud, Dumbbell, Ellipsis, Layers3, Library, Timer } from '@lucide/svelte'
+  import { getActiveRestTimer } from '$lib/rest-timer'
   import type { AppView, WorkoutSession } from '$lib/types'
   import { formatCountdown, formatElapsed } from '$lib/utils'
 
@@ -13,11 +14,7 @@
 
   $: moreActive = view === 'more' || view === 'report' || view === 'routines' || view === 'exercises' || view === 'exercise' || view === 'settings'
 
-  $: activeRests = activeWorkout?.exercises
-    .filter((exercise) => exercise.restUntil && new Date(exercise.restUntil).getTime() > now)
-    .map((exercise) => ({ name: exercise.name, remaining: (new Date(exercise.restUntil ?? 0).getTime() - now) / 1_000 }))
-    .sort((a, b) => a.remaining - b.remaining) ?? []
-  $: activeRest = activeRests[0]
+  $: activeRest = getActiveRestTimer(activeWorkout, now)
 </script>
 
 
@@ -38,8 +35,8 @@
     <div class="mt-auto">
       {#if activeWorkout && view !== 'workout'}
         <button class="mb-3 w-full rounded-2xl bg-accent p-4 text-left text-accent-ink" on:click={onResume}>
-          <span class="block truncate text-sm font-medium">{activeWorkout.title}</span>
-          <span class="mt-2 flex items-center justify-between gap-2"><span class="font-dot text-xs tabular-nums">{formatElapsed(activeWorkout.startedAt, now)}</span><span class="rounded-full bg-ink px-2.5 py-1 text-[0.6875rem] text-paper">{activeRest ? formatCountdown(activeRest.remaining) : 'Resume'}</span></span>
+          <span class="block truncate text-sm font-medium">{activeRest ? activeRest.nextLabel : activeWorkout.title}</span>
+          <span class="mt-2 flex items-center justify-between gap-2"><span class="font-dot inline-flex items-center gap-1.5 text-xs tabular-nums">{#if activeRest}<Timer class="size-3.5" />REST {formatCountdown(activeRest.remaining)}{:else}{formatElapsed(activeWorkout.startedAt, now)}{/if}</span><span class="rounded-full bg-ink px-2.5 py-1 text-[0.6875rem] text-paper">Resume</span></span>
         </button>
       {/if}
       <div class="rounded-full bg-paper px-4 py-3 text-xs text-muted">
@@ -52,8 +49,8 @@
 
   {#if view !== 'workout' && activeWorkout}
     <button class="fixed inset-x-4 bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+4rem)] z-20 flex min-h-16 items-center justify-between rounded-2xl bg-accent px-4 text-left text-accent-ink lg:hidden" on:click={onResume} aria-label={`Resume ${activeWorkout.title}`}>
-      <span class="min-w-0"><span class="block truncate text-sm font-medium">{activeWorkout.title}</span><span class="font-dot mt-1 block text-xs tabular-nums">{formatElapsed(activeWorkout.startedAt, now)}</span></span>
-      <span class="ml-4 flex shrink-0 items-center gap-2 rounded-full bg-ink px-3 py-2 text-xs text-paper">{#if activeRest}<Timer class="size-4" />{formatCountdown(activeRest.remaining)}{:else}<Dumbbell class="size-4" />Resume{/if}</span>
+      <span class="min-w-0"><span class="block truncate text-sm font-medium">{activeRest ? activeRest.nextLabel : activeWorkout.title}</span><span class="font-dot mt-1 flex items-center gap-1.5 text-xs tabular-nums">{#if activeRest}<Timer class="size-3.5" />REST {formatCountdown(activeRest.remaining)}{:else}{formatElapsed(activeWorkout.startedAt, now)}{/if}</span></span>
+      <span class="ml-4 flex shrink-0 items-center gap-2 rounded-full bg-ink px-3 py-2 text-xs text-paper"><Dumbbell class="size-4" />Resume</span>
     </button>
   {/if}
   {#if view !== 'workout'}

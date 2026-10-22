@@ -139,3 +139,12 @@
 - Moved the active rest timer to a bottom-docked panel with a larger centered countdown and its adjustment controls arranged below.
 - Simplified Today to the planned workout, training calendar, and deterministic daily signals; removed the duplicate coach brief, routine-ranking, detailed recovery/load/dose cards, and recent-session shortcut.
 - Corrected Gemini structured-output requests to use the current REST `responseFormat.text.schema` payload, kept provider schemas bounded as report evidence grows, and surfaced safe upstream error details.
+- Restored the home muscle-readiness chart and added a completed-today state that keeps the next cycle routine queued without presenting it as ready early.
+- Changed active volume to count only completed current-workout sets, then compare the saved session with the latest comparable workout after completion.
+- Collapsed exercises automatically after every set is complete, with a compact performance summary and an explicit Edit control that restores all set controls.
+- Disabled double-tap page zoom through app-wide manipulation touch behavior and treated any completed first-set load increase as progression rather than requiring an exact calculated target.
+- Rewound the training-cycle queue when its latest completed linked workout is deleted, allowing that routine to be restarted while preserving manually positioned queues and ignoring deletions older than later cycle completions.
+- Reconciled previously deleted cycle workouts during local hydration and sync so queues already advanced before the deletion fix return to the deleted routine on the next app load.
+- Kept the complete active-workout header—including duration, volume, and set count—visible while scrolling through exercises.
+- Replaced the global active-workout duration with the live rest countdown whenever a rest timer is running, while keeping Resume as the action across mobile and desktop views.
+- Added next-up context to rest timers so they identify the next set in the current exercise, the first set of the next exercise, or the finish-workout action after the final set.
