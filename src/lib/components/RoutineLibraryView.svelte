@@ -2,9 +2,10 @@
   import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, Dumbbell, Pencil, Play, Plus, Trash2, X } from '@lucide/svelte'
   import { tick } from 'svelte'
   import type { AiSettings } from '$lib/ai-coach'
-  import type { ExerciseDefinition, ProgressionRule, RoutineExercise, RoutineTemplate, TrainingCycle, TrainingProfile, WorkoutSession } from '$lib/types'
+  import type { EquipmentSettings, ExerciseDefinition, ProgressionRule, RoutineExercise, RoutineTemplate, TrainingCycle, TrainingProfile, WorkoutSession } from '$lib/types'
   import { createRoutineExercise, getRoutineMuscleGroups } from '$lib/routines'
   import { supportsProgression } from '$lib/progression'
+  import { getEquipmentWeightOptions } from '$lib/equipment-settings'
   import { newId } from '$lib/utils'
   import ConfirmDialog from './ConfirmDialog.svelte'
   import ContextualAiInsight from './ContextualAiInsight.svelte'
@@ -27,11 +28,18 @@
   export let trainingProfile: TrainingProfile | null
   export let aiSettings: AiSettings
   export let online: boolean
+  export let equipmentSettings: EquipmentSettings | null
 
   let editor: HTMLDialogElement
   let deleteDialog: ConfirmDialog
   let draft: RoutineTemplate | null = null
   let pendingDelete: RoutineTemplate | null = null
+
+  function progressionLoadSummary(rule: ProgressionRule, equipment: string) {
+    const rackSize = getEquipmentWeightOptions(equipmentSettings, equipment).length
+    if (rackSize > 0) return `${equipment} rack · ${rackSize} loads`
+    return rule.weightIncrement === null ? 'manual load' : `+${rule.weightIncrement}kg`
+  }
 
   function newDraft(): RoutineTemplate {
     const timestamp = new Date().toISOString()
@@ -88,6 +96,7 @@
         : exercise),
     }
   }
+
 
   function moveExercise(index: number, direction: -1 | 1) {
     if (!draft) return
@@ -207,15 +216,20 @@
                 <details class="mt-2 rounded-xl bg-paper">
                   <summary class="flex min-h-11 items-center justify-between gap-3 px-3 text-sm font-medium">
                     <span>First-set progression</span>
-                    <span class="min-w-0 truncate text-right text-xs font-normal text-muted">{exercise.progression.minReps}–{exercise.progression.maxReps} reps · {exercise.progression.weightIncrement === null ? 'manual load' : `+${exercise.progression.weightIncrement}kg`}</span>
+                    <span class="min-w-0 truncate text-right text-xs font-normal text-muted">{exercise.progression.minReps}–{exercise.progression.maxReps} reps · {progressionLoadSummary(exercise.progression, exercise.equipment)}</span>
                   </summary>
                   <div class="border-t border-rule p-3">
                     <p class="mb-3 text-xs leading-5 text-muted">Sets the target for the first working set. Later sets remain fatigue context.</p>
                     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       <label><span class="block text-[0.625rem] font-medium uppercase text-muted">Min reps</span><input class="mt-1 min-h-10 w-full rounded-xl bg-canvas px-3 text-sm outline-none" type="number" min="1" max="30" value={exercise.progression.minReps} on:change={(event) => { const minReps = Math.max(1, Number(event.currentTarget.value)); updateProgression(exercise.id, { minReps, maxReps: Math.max(minReps, exercise.progression.maxReps) }) }} /></label>
                       <label><span class="block text-[0.625rem] font-medium uppercase text-muted">Max reps</span><input class="mt-1 min-h-10 w-full rounded-xl bg-canvas px-3 text-sm outline-none" type="number" min={exercise.progression.minReps} max="50" value={exercise.progression.maxReps} on:change={(event) => updateProgression(exercise.id, { maxReps: Math.max(exercise.progression.minReps, Number(event.currentTarget.value)) })} /></label>
-                      <label class="col-span-2 sm:col-span-1"><span class="block text-[0.625rem] font-medium uppercase text-muted">Load step</span><select class="mt-1 min-h-10 w-full rounded-xl bg-canvas px-2 text-sm outline-none" value={exercise.progression.weightIncrement ?? 0} on:change={(event) => { const value = Number(event.currentTarget.value); updateProgression(exercise.id, { weightIncrement: value > 0 ? value : null }) }}><option value={0}>Manual</option><option value={1}>1 kg</option><option value={1.25}>1.25 kg</option><option value={2}>2 kg</option><option value={2.5}>2.5 kg</option><option value={5}>5 kg</option></select></label>
+                      <label class="col-span-2 sm:col-span-1"><span class="block text-[0.625rem] font-medium uppercase text-muted">Fixed load step</span><select class="mt-1 min-h-10 w-full rounded-xl bg-canvas px-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-45" value={exercise.progression.weightIncrement ?? 0} disabled={getEquipmentWeightOptions(equipmentSettings, exercise.equipment).length > 0} on:change={(event) => { const value = Number(event.currentTarget.value); updateProgression(exercise.id, { weightIncrement: value > 0 ? value : null }) }}><option value={0}>Manual</option><option value={1}>1 kg</option><option value={1.25}>1.25 kg</option><option value={2}>2 kg</option><option value={2.5}>2.5 kg</option><option value={5}>5 kg</option></select></label>
                     </div>
+                    {#if getEquipmentWeightOptions(equipmentSettings, exercise.equipment).length > 0}
+                      <p class="mt-2 text-xs leading-5 text-muted">Uses the exact {exercise.equipment} rack from Equipment settings. Clear that rack to use this fixed step.</p>
+                    {:else}
+                      <p class="mt-2 text-xs leading-5 text-muted">No {exercise.equipment} rack is configured, so this fixed step is used.</p>
+                    {/if}
                   </div>
                 </details>
               {/if}

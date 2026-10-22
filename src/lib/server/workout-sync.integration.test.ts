@@ -47,7 +47,7 @@ function d1Database(database: DatabaseSync) {
 }
 
 function applyMigrations(database: DatabaseSync) {
-  for (const name of ['0001_workouts.sql', '0002_routines.sql', '0003_training_cycle.sql', '0004_normalized_training.sql', '0005_warmup_rpe.sql', '0006_first_set_progression.sql', '0007_ai_training.sql', '0008_inferred_cycle_rest.sql', '0009_workout_checkins.sql']) {
+  for (const name of ['0001_workouts.sql', '0002_routines.sql', '0003_training_cycle.sql', '0004_normalized_training.sql', '0005_warmup_rpe.sql', '0006_first_set_progression.sql', '0007_ai_training.sql', '0008_inferred_cycle_rest.sql', '0009_workout_checkins.sql', '0010_progression_weight_options.sql', '0011_equipment_settings.sql']) {
     database.exec(readFileSync(new URL(`../../../migrations/${name}`, import.meta.url), 'utf8'))
   }
 }
@@ -84,7 +84,7 @@ const workout: WorkoutSession = {
     notes: '',
     restSeconds: 120,
     restUntil: null,
-    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [40, 47.5, 55] },
     sets: [{
       id: 'set-1',
       weight: 80,
@@ -107,7 +107,7 @@ const workout: WorkoutSession = {
     notes: '',
     restSeconds: 120,
     restUntil: null,
-    progression: { minReps: 0, maxReps: 0, weightIncrement: null },
+    progression: { minReps: 0, maxReps: 0, weightIncrement: null, weightOptions: [] },
     sets: [{
       id: 'set-2',
       weight: null,
@@ -140,7 +140,7 @@ const routine: RoutineTemplate = {
     restSeconds: 120,
     setCount: 3,
     hasWarmupSet: true,
-    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
   }],
 }
 
@@ -167,6 +167,15 @@ const profile: TrainingProfile = {
   updatedAt: '2026-10-19T09:00:00.000Z',
 }
 
+const equipmentSettings = {
+  id: 'primary-equipment-settings',
+  weightOptionsByEquipment: {
+    Barbell: [20, 40, 47.5, 55],
+    Dumbbells: [5, 10, 15, 20, 25, 30, 35, 40, 47.5],
+  },
+  updatedAt: '2026-10-19T09:00:00.000Z',
+} as const
+
 
 function syncRequest(body: unknown) {
   return new Request('http://localhost/api/sync', {
@@ -188,6 +197,7 @@ async function sync(environment: WorkoutSyncEnvironment, body: unknown) {
     trainingCycle: TrainingCycle | null
     cursor: number
     profile: TrainingProfile | null
+    equipmentSettings: typeof equipmentSettings | null
   }>
 }
 
@@ -199,13 +209,14 @@ describe('normalized workout sync', () => {
       DB: d1Database(database),
       LOCAL_SYNC_TOKEN: 'lifeos-local-dev',
     }
-    const archive = { deviceId: 'device-1', workouts: [workout], routines: [routine], trainingCycle, profile }
+    const archive = { deviceId: 'device-1', workouts: [workout], routines: [routine], trainingCycle, profile, equipmentSettings }
 
     const first = await sync(environment, archive)
     expect(first.workouts).toEqual([workout])
     expect(first.routines).toEqual([routine])
     expect(first.trainingCycle).toEqual(trainingCycle)
     expect(first.profile).toEqual(profile)
+    expect(first.equipmentSettings).toEqual(equipmentSettings)
     expect(first.cursor).toBeGreaterThan(0)
 
     const unchanged = await sync(environment, { ...archive, cursor: first.cursor })
@@ -227,6 +238,7 @@ describe('normalized workout sync', () => {
 
     const complete = await sync(environment, { deviceId: 'device-2', workouts: [], routines: [], trainingCycle: null })
     expect(complete.workouts[0].notes).toBe('New personal best')
+    expect(complete.equipmentSettings).toEqual(equipmentSettings)
     expect(database.prepare('SELECT authenticated_subject FROM device_sync_state WHERE device_id = ?').get('device-1')).toEqual({ authenticated_subject: 'local-development' })
 
     database.close()

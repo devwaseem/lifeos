@@ -1,4 +1,5 @@
-import type { TrainingProfile } from '../types'
+import { normalizeEquipmentSettings } from '../equipment-settings'
+import type { EquipmentSettings, TrainingProfile } from '../types'
 
 interface TrainingProfileRow {
   id: TrainingProfile['id']
@@ -9,6 +10,12 @@ interface TrainingProfileRow {
   available_equipment: string
   excluded_exercises: string
   movement_constraints: string
+  updated_at: string
+}
+
+interface EquipmentSettingsRow {
+  id: EquipmentSettings['id']
+  weight_options_by_equipment: string
   updated_at: string
 }
 
@@ -36,7 +43,26 @@ function profileFromRow(row: TrainingProfileRow | null): TrainingProfile | null 
   }
 }
 
-export async function syncTrainingContext(database: D1Database, profile: TrainingProfile | null) {
+function equipmentSettingsFromRow(row: EquipmentSettingsRow | null): EquipmentSettings | null {
+  if (!row) return null
+  let weightOptionsByEquipment: unknown = {}
+  try {
+    weightOptionsByEquipment = JSON.parse(row.weight_options_by_equipment)
+  } catch {
+    weightOptionsByEquipment = {}
+  }
+  return normalizeEquipmentSettings({
+    id: row.id,
+    weightOptionsByEquipment,
+    updatedAt: row.updated_at,
+  })
+}
+
+export async function syncTrainingContext(
+  database: D1Database,
+  profile: TrainingProfile | null,
+  equipmentSettings: EquipmentSettings | null,
+) {
   if (profile) {
     await database.prepare(`
       INSERT INTO training_profiles (
@@ -66,12 +92,36 @@ export async function syncTrainingContext(database: D1Database, profile: Trainin
     ).run()
   }
 
-  const profileRow = await database.prepare(`
-    SELECT id, primary_goal, experience_level, days_per_week, session_minutes,
-      available_equipment, excluded_exercises, movement_constraints, updated_at
-    FROM training_profiles WHERE id = 'primary-training-profile'
-  `).first<TrainingProfileRow>()
-  return { profile: profileFromRow(profileRow) }
+  if (equipmentSettings) {
+    await database.prepare(`
+      INSERT INTO equipment_settings (id, weight_options_by_equipment, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        weight_options_by_equipment = excluded.weight_options_by_equipment,
+        updated_at = excluded.updated_at
+      WHERE excluded.updated_at > equipment_settings.updated_at
+    `).bind(
+      equipmentSettings.id,
+      JSON.stringify(equipmentSettings.weightOptionsByEquipment),
+      equipmentSettings.updatedAt,
+    ).run()
+  }
+
+  const [profileRow, equipmentSettingsRow] = await Promise.all([
+    database.prepare(`
+      SELECT id, primary_goal, experience_level, days_per_week, session_minutes,
+        available_equipment, excluded_exercises, movement_constraints, updated_at
+      FROM training_profiles WHERE id = 'primary-training-profile'
+    `).first<TrainingProfileRow>(),
+    database.prepare(`
+      SELECT id, weight_options_by_equipment, updated_at
+      FROM equipment_settings WHERE id = 'primary-equipment-settings'
+    `).first<EquipmentSettingsRow>(),
+  ])
+  return {
+    profile: profileFromRow(profileRow),
+    equipmentSettings: equipmentSettingsFromRow(equipmentSettingsRow),
+  }
 }
 
 export async function recordDeviceSync(database: D1Database, deviceId: string, authenticatedSubject: string, revision: number, syncedAt: string) {

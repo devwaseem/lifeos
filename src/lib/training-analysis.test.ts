@@ -21,7 +21,7 @@ const routine: RoutineTemplate = {
     restSeconds: 120,
     setCount: 3,
     hasWarmupSet: true,
-    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
   }],
 }
 

@@ -25,7 +25,7 @@ function completedTimedWorkout(): WorkoutSession {
       notes: '',
       restSeconds: 120,
       restUntil: null,
-      progression: { minReps: 8, maxReps: 12, weightIncrement: 2.5 },
+      progression: { minReps: 8, maxReps: 12, weightIncrement: 2.5, weightOptions: [] },
       sets: [{
         id: 'set',
         weight: null,

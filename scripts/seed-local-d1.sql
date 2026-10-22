@@ -24,7 +24,11 @@ WITH seed (
   ('server-demo-deadlift', 'server-demo-full-body', 0, 'deadlift', 'Deadlift', 'Back', 'Barbell', '', 120, NULL, 5, 8, 2.5),
   ('server-demo-press', 'server-demo-full-body', 1, 'overhead-press', 'Overhead Press', 'Shoulders', 'Barbell', '', 120, NULL, 8, 12, 2.5)
 )
-INSERT OR IGNORE INTO workout_exercises
+INSERT OR IGNORE INTO workout_exercises (
+  id, workout_id, position, exercise_id, name, primary_muscle, equipment, notes,
+  rest_seconds, rest_until, progression_min_reps, progression_max_reps,
+  progression_weight_increment
+)
 SELECT * FROM seed
 WHERE EXISTS (SELECT 1 FROM workouts WHERE id = 'server-demo-full-body');
 

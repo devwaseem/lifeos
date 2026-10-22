@@ -26,7 +26,7 @@ function workoutWithSets(sets: unknown[]): WorkoutSession {
       notes: '',
       restSeconds: 120,
       restUntil: null,
-      progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+      progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
       sets,
     }],
   } as WorkoutSession

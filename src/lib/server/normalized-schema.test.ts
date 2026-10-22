@@ -29,7 +29,7 @@ const workout: WorkoutSession = {
     notes: 'Controlled eccentric',
     restSeconds: 120,
     restUntil: null,
-    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
     sets: [{
       id: 'set-1',
       weight: 100,
@@ -62,7 +62,7 @@ const routine: RoutineTemplate = {
     restSeconds: 120,
     setCount: 3,
     hasWarmupSet: false,
-    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
   }],
 }
 
@@ -100,6 +100,8 @@ describe('normalized D1 migration', () => {
     database.exec(migration('0007_ai_training.sql'))
     database.exec(migration('0008_inferred_cycle_rest.sql'))
     database.exec(migration('0009_workout_checkins.sql'))
+    database.exec(migration('0010_progression_weight_options.sql'))
+    database.exec(migration('0011_equipment_settings.sql'))
 
     const workoutColumns = database.prepare('PRAGMA table_info(workouts)').all().map((column) => column.name)
     const workoutSetColumns = database.prepare('PRAGMA table_info(workout_sets)').all().map((column) => column.name)
@@ -110,6 +112,9 @@ describe('normalized D1 migration', () => {
     expect(workoutSetColumns).toContain('warmup')
     expect(workoutSetColumns).not.toContain('failure')
     expect(workoutExerciseColumns).not.toContain('progression_max_rpe')
+    expect(workoutExerciseColumns).toContain('progression_weight_options')
+    expect(database.prepare('PRAGMA table_info(routine_exercises)').all().map((column) => column.name)).not.toContain('progression_weight_options')
+    expect(database.prepare('PRAGMA table_info(equipment_settings)').all().map((column) => column.name)).toEqual(['id', 'weight_options_by_equipment', 'updated_at'])
     expect(profileColumns).toContain('excluded_exercises')
     expect(profileColumns).not.toContain('preferred_exercise_ids')
     expect(profileColumns).not.toContain('excluded_exercise_ids')
@@ -117,10 +122,11 @@ describe('normalized D1 migration', () => {
       SELECT name
       FROM sqlite_master
       WHERE type = 'table'
-        AND name IN ('training_profiles', 'training_checkins', 'workout_checkins', 'device_sync_state', 'routine_change_proposals', 'mcp_audit_log')
+        AND name IN ('equipment_settings', 'training_profiles', 'training_checkins', 'workout_checkins', 'device_sync_state', 'routine_change_proposals', 'mcp_audit_log')
       ORDER BY name
     `).all().map((table) => table.name)).toEqual([
       'device_sync_state',
+      'equipment_settings',
       'training_profiles',
       'workout_checkins',
     ])

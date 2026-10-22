@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createWorkoutFromRoutine } from './routines'
-import type { RoutineTemplate, WorkoutCheckIn, WorkoutSession, WorkoutSet } from './types'
+import type { EquipmentSettings, RoutineTemplate, WorkoutCheckIn, WorkoutSession, WorkoutSet } from './types'
 
 function completedSet(id: string, weight: number, reps: number, warmup = false): WorkoutSet {
   return {
@@ -46,8 +46,16 @@ const routine: RoutineTemplate = {
     restSeconds: 120,
     setCount: 3,
     hasWarmupSet: true,
-    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
   }],
+}
+
+const equipmentSettings: EquipmentSettings = {
+  id: 'primary-equipment-settings',
+  weightOptionsByEquipment: {
+    Barbell: [20, 40, 47.5, 55],
+  },
+  updatedAt: '2026-10-20T07:00:00.000Z',
 }
 
 const previousWorkout: WorkoutSession = {
@@ -98,5 +106,19 @@ describe('routine workout set planning', () => {
       { weight: 80, reps: 7, rpe: 8 },
       { weight: 80, reps: 7, rpe: 8 },
     ])
+  })
+
+  it('snapshots the equipment rack into the workout without storing it on the routine', () => {
+    const workout = createWorkoutFromRoutine(
+      routine,
+      checkIn,
+      '2026-10-20T08:00:00.000Z',
+      null,
+      [previousWorkout],
+      equipmentSettings,
+    )
+
+    expect(routine.exercises[0].progression.weightOptions).toEqual([])
+    expect(workout.exercises[0].progression.weightOptions).toEqual([20, 40, 47.5, 55])
   })
 })

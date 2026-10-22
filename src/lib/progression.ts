@@ -31,6 +31,30 @@ export interface ExerciseProgressionResult {
 }
 
 
+const MAX_WEIGHT_OPTIONS = 200
+const MAX_WEIGHT_KG = 1_000
+
+export function normalizeWeightOptions(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return Array.from(new Set(value
+    .filter((weight): weight is number => typeof weight === 'number' && Number.isFinite(weight) && weight > 0 && weight <= MAX_WEIGHT_KG)
+    .map((weight) => Math.round(weight * 100) / 100)))
+    .sort((left, right) => left - right)
+    .slice(0, MAX_WEIGHT_OPTIONS)
+}
+
+export function parseWeightOptionsInput(value: string) {
+  const tokens = value.trim() ? value.trim().split(/[\s,]+/) : []
+  if (tokens.length > MAX_WEIGHT_OPTIONS) {
+    return { weightOptions: [] as number[], error: `Enter no more than ${MAX_WEIGHT_OPTIONS} loads.` }
+  }
+  const weights = tokens.map(Number)
+  if (weights.some((weight) => !Number.isFinite(weight) || weight <= 0 || weight > MAX_WEIGHT_KG)) {
+    return { weightOptions: [] as number[], error: `Use positive loads up to ${MAX_WEIGHT_KG} kg, separated by commas.` }
+  }
+  return { weightOptions: normalizeWeightOptions(weights), error: null }
+}
+
 export function getEquipmentWeightIncrement(equipment: string) {
   if (equipment === 'Dumbbells' || equipment === 'Kettlebell') return 2
   if (equipment === 'Bodyweight' || equipment === 'Resistance Band' || equipment === 'Suspension Trainer') return null
@@ -46,10 +70,15 @@ export function defaultProgressionRule(equipment: string): ProgressionRule {
     minReps: 8,
     maxReps: 12,
     weightIncrement: getEquipmentWeightIncrement(equipment),
+    weightOptions: [],
   }
 }
 
-export function normalizeProgressionRule(rule: Partial<ProgressionRule> | undefined, equipment: string): ProgressionRule {
+export function normalizeProgressionRule(
+  rule: Partial<ProgressionRule> | undefined,
+  equipment: string,
+  weightOptions: unknown = rule?.weightOptions,
+): ProgressionRule {
   const defaults = defaultProgressionRule(equipment)
   const minReps = Number.isFinite(rule?.minReps) ? Math.min(30, Math.max(1, Math.round(rule?.minReps ?? defaults.minReps))) : defaults.minReps
   const maxReps = Number.isFinite(rule?.maxReps) ? Math.min(50, Math.max(minReps, Math.round(rule?.maxReps ?? defaults.maxReps))) : defaults.maxReps
@@ -59,7 +88,12 @@ export function normalizeProgressionRule(rule: Partial<ProgressionRule> | undefi
     : typeof increment === 'number' && Number.isFinite(increment) && increment > 0
       ? Math.min(100, Math.round(increment * 100) / 100)
       : defaults.weightIncrement
-  return { minReps, maxReps, weightIncrement }
+  return {
+    minReps,
+    maxReps,
+    weightIncrement,
+    weightOptions: normalizeWeightOptions(weightOptions),
+  }
 }
 
 function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSet | undefined, exercise: WorkoutExercise): SetProgressionTarget {
@@ -80,9 +114,15 @@ function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSe
 
   const previousWeight = previous.weight
   const reachedCeiling = previous.reps >= rule.maxReps
-  const canIncreaseLoad = reachedCeiling
-    && previousWeight !== null
-    && rule.weightIncrement !== null
+  const nextRackWeight = previousWeight === null
+    ? undefined
+    : rule.weightOptions.find((weight) => weight > previousWeight + 0.001)
+  const nextWeight = rule.weightOptions.length > 0
+    ? nextRackWeight
+    : previousWeight !== null && rule.weightIncrement !== null
+      ? Math.round((previousWeight + rule.weightIncrement) * 100) / 100
+      : undefined
+  const canIncreaseLoad = reachedCeiling && nextWeight !== undefined
 
   if (canIncreaseLoad) {
     return {
@@ -91,7 +131,7 @@ function targetFromPrevious(setId: string, setIndex: number, previous: WorkoutSe
       previousWeight,
       previousReps: previous.reps,
       previousRpe: previous.rpe,
-      targetWeight: Math.round((previousWeight + (rule.weightIncrement ?? 0)) * 100) / 100,
+      targetWeight: nextWeight,
       targetReps: rule.minReps,
       action: 'increase-load',
       rule,

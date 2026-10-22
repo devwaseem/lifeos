@@ -30,7 +30,7 @@ function d1Database(database: DatabaseSync) {
 }
 
 function applyMigrations(database: DatabaseSync) {
-  for (const name of ['0001_workouts.sql', '0002_routines.sql', '0003_training_cycle.sql', '0004_normalized_training.sql', '0005_warmup_rpe.sql', '0006_first_set_progression.sql', '0007_ai_training.sql', '0008_inferred_cycle_rest.sql', '0009_workout_checkins.sql']) {
+  for (const name of ['0001_workouts.sql', '0002_routines.sql', '0003_training_cycle.sql', '0004_normalized_training.sql', '0005_warmup_rpe.sql', '0006_first_set_progression.sql', '0007_ai_training.sql', '0008_inferred_cycle_rest.sql', '0009_workout_checkins.sql', '0010_progression_weight_options.sql', '0011_equipment_settings.sql']) {
     database.exec(readFileSync(new URL(`../../../migrations/${name}`, import.meta.url), 'utf8'))
   }
 }

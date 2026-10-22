@@ -20,7 +20,7 @@ const routine: RoutineTemplate = {
     restSeconds: 120,
     setCount: 3,
     hasWarmupSet: true,
-    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+    progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
   }],
 }
 
@@ -58,7 +58,7 @@ function workout(index: number, weight: number): WorkoutSession {
       notes: 'private exercise note',
       restSeconds: 120,
       restUntil: null,
-      progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+      progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
       sets: [{
         id: `set-${index}`,
         weight,

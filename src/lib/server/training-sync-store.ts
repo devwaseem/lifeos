@@ -9,6 +9,7 @@ import type {
   WorkoutSession,
   WorkoutSet,
 } from '../types'
+import { normalizeWeightOptions } from '../progression'
 
 const MAX_BINDINGS_PER_STATEMENT = 90
 
@@ -58,6 +59,7 @@ interface WorkoutExerciseRow {
   progression_min_reps: number
   progression_max_reps: number
   progression_weight_increment: number | null
+  progression_weight_options: string
 }
 
 interface SecondaryMuscleRow {
@@ -135,11 +137,21 @@ function progression(row: {
   progression_min_reps: number
   progression_max_reps: number
   progression_weight_increment: number | null
+  progression_weight_options?: string
 }): ProgressionRule {
+  let storedWeightOptions: unknown = []
+  if (typeof row.progression_weight_options === 'string') {
+    try {
+      storedWeightOptions = JSON.parse(row.progression_weight_options)
+    } catch {
+      storedWeightOptions = []
+    }
+  }
   return {
     minReps: row.progression_min_reps,
     maxReps: row.progression_max_reps,
     weightIncrement: row.progression_weight_increment,
+    weightOptions: normalizeWeightOptions(storedWeightOptions),
   }
 }
 
@@ -258,7 +270,7 @@ async function storeWorkout(database: D1Database, workout: WorkoutSession) {
   statements.push(...conditionalInsertStatements(database, 'workout_exercises', [
     'id', 'workout_id', 'position', 'exercise_id', 'name', 'primary_muscle', 'equipment', 'notes',
     'rest_seconds', 'rest_until', 'progression_min_reps', 'progression_max_reps',
-    'progression_weight_increment',
+    'progression_weight_increment', 'progression_weight_options',
   ], workout.exercises.map((exercise, position) => [
     exercise.id,
     workout.id,
@@ -273,6 +285,7 @@ async function storeWorkout(database: D1Database, workout: WorkoutSession) {
     exercise.progression.minReps,
     exercise.progression.maxReps,
     exercise.progression.weightIncrement,
+    JSON.stringify(exercise.progression.weightOptions),
   ]), condition, conditionValues))
   statements.push(...conditionalInsertStatements(database, 'workout_exercise_secondary_muscles', [
     'workout_exercise_id', 'position', 'muscle', 'fraction',
@@ -446,7 +459,8 @@ async function loadWorkouts(database: D1Database, cursor: number | null, upperRe
   const workoutIds = workouts.map((workout) => workout.id)
   const exercises = await rowsForParents<WorkoutExerciseRow>(database, workoutIds, (placeholders) => `
     SELECT id, workout_id, exercise_id, name, primary_muscle, equipment, notes, rest_seconds,
-      rest_until, progression_min_reps, progression_max_reps, progression_weight_increment
+      rest_until, progression_min_reps, progression_max_reps, progression_weight_increment,
+      progression_weight_options
     FROM workout_exercises
     WHERE workout_id IN (${placeholders})
     ORDER BY workout_id, position
@@ -540,7 +554,8 @@ async function loadRoutines(database: D1Database, cursor: number | null, upperRe
   const routineIds = routines.map((routine) => routine.id)
   const exercises = await rowsForParents<RoutineExerciseRow>(database, routineIds, (placeholders) => `
     SELECT id, routine_id, exercise_id, name, primary_muscle, equipment, notes, rest_seconds,
-      set_count, has_warmup_set, progression_min_reps, progression_max_reps, progression_weight_increment
+      set_count, has_warmup_set, progression_min_reps, progression_max_reps,
+      progression_weight_increment
     FROM routine_exercises
     WHERE routine_id IN (${placeholders})
     ORDER BY routine_id, position

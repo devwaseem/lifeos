@@ -55,15 +55,17 @@ estimated_RIR = clamp(10 − set_RPE, 0, 4)
 
 Warmup sets are explicitly marked, show RPE as not applicable without exposing the picker, and are excluded from working-set counts, volume, records, progression targets, readiness, muscle dose, and strength estimates. Their stored RPE is always `null`.
 
-Each routine exercise stores a minimum and maximum repetition target plus an optional load increment. When a workout starts, each warmup and working set is prefilled from the matching set in the latest completed same-exercise session, including load, repetitions, and working-set RPE; if the new routine has more working sets, the final known working set is repeated.
+Each routine exercise stores a minimum and maximum repetition target plus an optional fixed load increment. Equipment settings stores one optional exact list of available loads in kilograms for each equipment type, such as Dumbbells, Cable, Machine, or Barbell. When a workout starts, the matching equipment rack is copied into every exercise in that workout so later settings changes cannot rewrite the target that was prescribed for the saved session. Each warmup and working set is prefilled from the matching set in the latest completed same-exercise session, including load, repetitions, and working-set RPE; if the new routine has more working sets, the final known working set is repeated.
 
 The progression target applies to the first working set:
 
 - Below the repetition ceiling: keep the load and add one repetition.
-- At the repetition ceiling with a configured load increment: add that increment and return to the minimum repetitions.
-- RPE does not gate either target. In particular, an RPE 10 first set can still produce the next repetition or load target.
+- At the repetition ceiling with a configured rack for the exercise’s equipment type: select the smallest listed load greater than the previous load and return to the minimum repetitions.
+- At the repetition ceiling without an equipment rack but with a routine-level fixed increment: add that increment and return to the minimum repetitions.
+- At the highest listed rack load, or without any automatic load rule: repeat the previous load and repetitions.
+- RPE does not gate any target. In particular, an RPE 10 first set can still produce the next repetition or load target.
 
-Targets are **suggestions** and do not overwrite values after workout creation. The increments, target band, and adjustment rules are product heuristics rather than universal prescriptions.
+Equipment rack loads are normalized to unique ascending values, but they are not assumed to be evenly spaced. Targets are **suggestions** and do not overwrite values after workout creation. The rack, fallback increments, target band, and adjustment rules are product heuristics rather than universal prescriptions.
 
 The exercise-level progression outcome compares only the completed first non-warmup set with the first working set from the immediately preceding completed same-exercise session:
 

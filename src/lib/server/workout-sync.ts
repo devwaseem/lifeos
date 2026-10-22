@@ -1,3 +1,4 @@
+import { isEquipmentSettings } from '../equipment-settings'
 import type { RoutineTemplate, TrainingCycle, TrainingProfile, WorkoutCheckIn, WorkoutSession } from '../types'
 import { authenticateOwnerRequest, type OwnerAuthEnvironment } from './owner-auth'
 import { recordDeviceSync, syncTrainingContext } from './training-context-store'
@@ -16,6 +17,7 @@ interface SyncBody {
   trainingCycle?: unknown
   cursor?: unknown
   profile?: unknown
+  equipmentSettings?: unknown
 }
 
 
@@ -142,6 +144,13 @@ export async function handleWorkoutSyncRequest(
       ? body.profile
       : undefined
   if (profile === undefined) return json({ error: 'Invalid training profile' }, 400)
+  const equipmentSettings = body.equipmentSettings === undefined || body.equipmentSettings === null
+    ? null
+    : isEquipmentSettings(body.equipmentSettings)
+      ? body.equipmentSettings
+      : undefined
+  if (equipmentSettings === undefined) return json({ error: 'Invalid equipment settings' }, 400)
+
 
   const snapshot = await syncTrainingData(environment.DB, {
     workouts,
@@ -149,7 +158,7 @@ export async function handleWorkoutSyncRequest(
     trainingCycle,
     cursor: typeof body.cursor === 'number' ? body.cursor : null,
   })
-  const context = await syncTrainingContext(environment.DB, profile)
+  const context = await syncTrainingContext(environment.DB, profile, equipmentSettings)
   const syncedAt = new Date().toISOString()
   await recordDeviceSync(environment.DB, body.deviceId, authenticatedSubject, snapshot.cursor, syncedAt)
   return json({ ...snapshot, ...context, syncedAt })

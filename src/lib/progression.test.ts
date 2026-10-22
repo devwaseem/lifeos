@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildExerciseProgressionResults, buildSetProgressionTargets, defaultProgressionRule, supportsProgression } from './progression'
+import { buildExerciseProgressionResults, buildSetProgressionTargets, defaultProgressionRule, parseWeightOptionsInput, supportsProgression } from './progression'
 import { DEFAULT_REST_SECONDS } from './workouts'
 import type { WorkoutSession } from './types'
 
@@ -19,7 +19,7 @@ describe('exercise progression eligibility', () => {
   })
 
   it('defaults progressive exercises to an 8–12 rep band and two-minute rest', () => {
-    expect(defaultProgressionRule('Barbell')).toEqual({ minReps: 8, maxReps: 12, weightIncrement: 2.5 })
+    expect(defaultProgressionRule('Barbell')).toEqual({ minReps: 8, maxReps: 12, weightIncrement: 2.5, weightOptions: [] })
     expect(DEFAULT_REST_SECONDS).toBe(120)
   })
 
@@ -89,7 +89,7 @@ describe('exercise progression eligibility', () => {
         notes: '',
         restSeconds: 120,
         restUntil: null,
-        progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+        progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
         sets: [
           { id: `${id}-1`, weight: 80, reps: firstReps, rpe, durationSeconds: null, distanceMeters: null, completed: true, completedAt: startedAt, warmup: false, notes: '' },
           { id: `${id}-2`, weight: 80, reps: secondReps, rpe: 10, durationSeconds: null, distanceMeters: null, completed: true, completedAt: startedAt, warmup: false, notes: '' },
@@ -133,7 +133,7 @@ describe('historical progression targets', () => {
         notes: '',
         restSeconds: 120,
         restUntil: null,
-        progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5 },
+        progression: { minReps: 6, maxReps: 10, weightIncrement: 2.5, weightOptions: [] },
         sets: [historicalSet('previous-warmup', 10, true), historicalSet('previous-1', 8), historicalSet('previous-2', 7)],
       }],
     }
@@ -177,6 +177,46 @@ describe('historical progression targets', () => {
       targetWeight: 82.5,
       targetReps: 6,
     })
+  })
+
+  it('uses the next exact rack load instead of assuming a linear increment', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 10, 7)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 10, 6)
+    previous.exercises[0].sets[0].weight = 40
+    current.exercises[0].progression.weightOptions = [5, 10, 15, 20, 25, 30, 35, 40, 47.5]
+    current.status = 'active'
+    current.completedAt = null
+
+    const targets = buildSetProgressionTargets(current, [current, previous])
+
+    expect(targets.get('current-1')).toMatchObject({
+      action: 'increase-load',
+      targetWeight: 47.5,
+      targetReps: 6,
+    })
+  })
+
+  it('repeats the top rack load rather than suggesting unavailable weight', () => {
+    const previous = workout('previous', '2026-10-19T08:00:00.000Z', 10, 7)
+    const current = workout('current', '2026-10-20T08:00:00.000Z', 10, 6)
+    previous.exercises[0].sets[0].weight = 47.5
+    current.exercises[0].progression.weightOptions = [40, 47.5]
+    current.status = 'active'
+    current.completedAt = null
+
+    expect(buildSetProgressionTargets(current, [current, previous]).get('current-1')).toMatchObject({
+      action: 'repeat',
+      targetWeight: 47.5,
+      targetReps: 10,
+    })
+  })
+
+  it('parses pasted rack loads into sorted unique kilograms', () => {
+    expect(parseWeightOptionsInput('47.5, 5 10, 40, 10')).toEqual({
+      weightOptions: [5, 10, 40, 47.5],
+      error: null,
+    })
+    expect(parseWeightOptionsInput('5, nope, 10').error).toContain('positive loads')
   })
 })
 

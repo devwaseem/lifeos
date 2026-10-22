@@ -1,20 +1,22 @@
 import type { AiSettings } from '$lib/ai-coach'
 import type { AiInsight, AiInsightKind } from '$lib/ai-insights'
 import type { AppleHealthExportRecord } from '$lib/apple-health'
-import type { ExerciseDefinition, ExerciseVideo, RoutineTemplate, SyncSettings, TrainingCycle, TrainingProfile, WorkoutSession } from '$lib/types'
+import type { EquipmentSettings, ExerciseDefinition, ExerciseVideo, RoutineTemplate, SyncSettings, TrainingCycle, TrainingProfile, WorkoutSession } from '$lib/types'
+import { normalizeEquipmentSettings } from '$lib/equipment-settings'
 import { normalizeExerciseDefinition } from '$lib/muscle-contributions'
 import { normalizeRoutines } from '$lib/routines'
 import { normalizeTrainingCycle } from '$lib/training-cycle'
 import { normalizeWorkouts } from '$lib/workouts'
 
 const DATABASE_NAME = 'lifeos-training'
-const DATABASE_VERSION = 8
+const DATABASE_VERSION = 9
 const WORKOUTS_STORE = 'workouts'
 const ROUTINES_STORE = 'routines'
 const TRAINING_CYCLE_STORE = 'training-cycle'
 const CUSTOM_EXERCISES_STORE = 'custom-exercises'
 const EXERCISE_VIDEOS_STORE = 'exercise-videos'
 const TRAINING_PROFILE_STORE = 'training-profile'
+const EQUIPMENT_SETTINGS_STORE = 'equipment-settings'
 const META_STORE = 'meta'
 const SETTINGS_KEY = 'sync-settings'
 const APPLE_HEALTH_EXPORTS_KEY = 'apple-health-exports'
@@ -71,6 +73,9 @@ function openDatabase() {
     }
     if (!database.objectStoreNames.contains(TRAINING_PROFILE_STORE)) {
       database.createObjectStore(TRAINING_PROFILE_STORE, { keyPath: 'id' })
+    }
+    if (!database.objectStoreNames.contains(EQUIPMENT_SETTINGS_STORE)) {
+      database.createObjectStore(EQUIPMENT_SETTINGS_STORE, { keyPath: 'id' })
     }
     for (const obsoleteStore of ['training-checkins', 'routine-proposals']) {
       if (database.objectStoreNames.contains(obsoleteStore)) database.deleteObjectStore(obsoleteStore)
@@ -182,6 +187,32 @@ export async function replaceTrainingProfile(profile: TrainingProfile | null) {
   const store = transaction.objectStore(TRAINING_PROFILE_STORE)
   store.clear()
   if (profile) store.put(profile)
+  await transactionComplete(transaction)
+}
+
+export async function getEquipmentSettings() {
+  const database = await openDatabase()
+  const transaction = database.transaction(EQUIPMENT_SETTINGS_STORE, 'readonly')
+  const settings = await requestResult(
+    transaction.objectStore(EQUIPMENT_SETTINGS_STORE).get('primary-equipment-settings') as IDBRequest<EquipmentSettings | undefined>,
+  )
+  await transactionComplete(transaction)
+  return settings ? normalizeEquipmentSettings(settings) : null
+}
+
+export async function saveEquipmentSettings(settings: EquipmentSettings) {
+  const database = await openDatabase()
+  const transaction = database.transaction(EQUIPMENT_SETTINGS_STORE, 'readwrite')
+  transaction.objectStore(EQUIPMENT_SETTINGS_STORE).put(normalizeEquipmentSettings(settings))
+  await transactionComplete(transaction)
+}
+
+export async function replaceEquipmentSettings(settings: EquipmentSettings | null) {
+  const database = await openDatabase()
+  const transaction = database.transaction(EQUIPMENT_SETTINGS_STORE, 'readwrite')
+  const store = transaction.objectStore(EQUIPMENT_SETTINGS_STORE)
+  store.clear()
+  if (settings) store.put(normalizeEquipmentSettings(settings))
   await transactionComplete(transaction)
 }
 

@@ -5,7 +5,7 @@ LifeOS Training is an offline-first workout journal for planning routines, recor
 ## Features
 
 - Active workout tracking with persistent timers, rest intervals, set notes, and a described RPE 6–10 scale
-- Reusable routines with ordered exercises, optional warmup sets, working-set defaults, coaching notes, and progression rules
+- Reusable routines with ordered exercises, optional warmup sets, working-set defaults, coaching notes, progression rules, and centralized per-equipment load racks for non-linear dumbbell, cable, and machine stacks
 - FIFO training cycles that advance only on completed workouts and infer rest after a configurable consecutive-training-day count
 - Exercise history, personal records, progress charts, and calendar views
 - Muscle-readiness and workload estimates derived from recorded training data
@@ -197,6 +197,7 @@ The application stores these records locally:
 
 - workouts and their ordered exercises and sets
 - reusable routines and progression settings
+- centralized per-equipment load-rack settings
 - the active training cycle
 - an explicit training profile
 - a subjective check-in embedded in each newly started workout
@@ -204,7 +205,7 @@ The application stores these records locally:
 - exercise video references
 - local AI provider preference and the latest generated coach brief
 
-Workouts, their pre-workout check-ins, routines, training-cycle records, and the training profile synchronize to D1. Ordered exercises, secondary-muscle contributions, sets, workout check-ins, and cycle slots use relational child rows with indexed timestamps, status, exercise, muscle, RPE, and completion fields for direct analytics. Device freshness is stored server-side. A revision cursor returns only records changed since the previous successful sync. Custom exercises and saved video references remain device-local. The synchronization and MCP authorization models are designed for one authenticated owner.
+Workouts, their pre-workout check-ins, routines, training-cycle records, the training profile, and equipment rack settings synchronize to D1. Each new workout snapshots the applicable equipment rack so historical targets remain stable when settings change. Ordered exercises, secondary-muscle contributions, sets, workout check-ins, and cycle slots use relational child rows with indexed timestamps, status, exercise, muscle, RPE, and completion fields for direct analytics. Device freshness is stored server-side. A revision cursor returns only records changed since the previous successful sync. Custom exercises and saved video references remain device-local. The synchronization and MCP authorization models are designed for one authenticated owner.
 
 ## Project structure
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, ChevronRight, Cloud, Layers3, Library } from '@lucide/svelte'
+  import { Activity, ChevronRight, Cloud, Layers3, Library, Settings2 } from '@lucide/svelte'
   import type { AppView } from '$lib/types'
 
   export let online: boolean
@@ -23,6 +23,11 @@
     <button class="destination" on:click={() => onNavigate('routines')}>
       <span class="destination-icon"><Layers3 class="size-5" /></span>
       <span class="min-w-0 flex-1"><span class="block text-base font-medium">Routines</span><span class="mt-1 block text-xs text-muted">Templates and training cycle</span></span>
+      <ChevronRight class="size-5 shrink-0 text-muted" />
+    </button>
+    <button class="destination" on:click={() => onNavigate('equipment-settings')}>
+      <span class="destination-icon"><Settings2 class="size-5" /></span>
+      <span class="min-w-0 flex-1"><span class="block text-base font-medium">Equipment</span><span class="mt-1 block text-xs text-muted">Exact dumbbell, cable, and machine racks</span></span>
       <ChevronRight class="size-5 shrink-0 text-muted" />
     </button>
     <button class="destination" on:click={() => onNavigate('exercises')}>

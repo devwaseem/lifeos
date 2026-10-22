@@ -1,5 +1,6 @@
-import type { ExerciseDefinition, RoutineExercise, RoutineTemplate, WorkoutCheckIn, WorkoutExercise, WorkoutSession } from '$lib/types'
+import type { EquipmentSettings, ExerciseDefinition, RoutineExercise, RoutineTemplate, WorkoutCheckIn, WorkoutExercise, WorkoutSession } from '$lib/types'
 import { defaultProgressionRule, normalizeProgressionRule } from '$lib/progression'
+import { getEquipmentWeightOptions } from '$lib/equipment-settings'
 import { resolveSecondaryMuscles } from '$lib/muscle-contributions'
 import { newId } from '$lib/utils'
 import { DEFAULT_REST_SECONDS } from '$lib/workouts'
@@ -48,7 +49,7 @@ export function normalizeRoutine(routine: RoutineTemplate): RoutineTemplate {
           : DEFAULT_REST_SECONDS,
         setCount: normalizeSetCount(exercise.setCount),
         hasWarmupSet: exercise.hasWarmupSet === true,
-        progression: normalizeProgressionRule(exercise.progression, exercise.equipment),
+        progression: normalizeProgressionRule(exercise.progression, exercise.equipment, []),
       }))
       : [],
   }
@@ -62,6 +63,7 @@ export function normalizeRoutines(routines: RoutineTemplate[]) {
 function workoutExerciseFromRoutine(
   exercise: RoutineExercise,
   previous: WorkoutExercise | undefined,
+  equipmentSettings: EquipmentSettings | null,
 ): WorkoutExercise {
   const workingSets = Array.from(
     { length: normalizeSetCount(exercise.setCount) },
@@ -77,7 +79,11 @@ function workoutExerciseFromRoutine(
     notes: exercise.notes,
     restSeconds: exercise.restSeconds,
     restUntil: null,
-    progression: normalizeProgressionRule(exercise.progression, exercise.equipment),
+    progression: normalizeProgressionRule(
+      exercise.progression,
+      exercise.equipment,
+      getEquipmentWeightOptions(equipmentSettings, exercise.equipment),
+    ),
     sets: exercise.hasWarmupSet
       ? [createWorkoutSet(true, getMatchingPreviousSet(previous, true, 0)), ...workingSets]
       : workingSets,
@@ -90,6 +96,7 @@ export function createWorkoutFromRoutine(
   timestamp = new Date().toISOString(),
   cycleSlotId: string | null = null,
   workouts: WorkoutSession[] = [],
+  equipmentSettings: EquipmentSettings | null = null,
 ): WorkoutSession {
   return {
     id: newId(),
@@ -106,6 +113,7 @@ export function createWorkoutFromRoutine(
     exercises: routine.exercises.map((exercise) => workoutExerciseFromRoutine(
       exercise,
       getPreviousWorkoutExercise(workouts, exercise.exerciseId),
+      equipmentSettings,
     )),
   }
 }
@@ -170,7 +178,7 @@ export function routineFromWorkout(
         restSeconds: exercise.restSeconds,
         setCount: Math.max(1, countWorkingSets(exercise.sets)),
         hasWarmupSet: exercise.sets.some((set) => set.warmup),
-        progression: normalizeProgressionRule(exercise.progression, exercise.equipment),
+        progression: normalizeProgressionRule(exercise.progression, exercise.equipment, []),
       }
     }),
   }

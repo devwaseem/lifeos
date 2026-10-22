@@ -22,6 +22,7 @@ export interface ProgressionRule {
   minReps: number
   maxReps: number
   weightIncrement: number | null
+  weightOptions: number[]
 }
 
 export interface WorkoutExercise {
@@ -135,6 +136,12 @@ export interface SyncSettings {
   lastSyncedAt: string | null
   syncCursor: number | null
 }
+export interface EquipmentSettings {
+  id: 'primary-equipment-settings'
+  weightOptionsByEquipment: Record<string, number[]>
+  updatedAt: string
+}
+
 
 export type TrainingGoal = 'strength' | 'hypertrophy' | 'general-fitness' | 'conditioning'
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced'
@@ -152,4 +159,4 @@ export interface TrainingProfile {
 }
 
 
-export type AppView = 'today' | 'history' | 'workout-history' | 'more' | 'report' | 'routines' | 'exercises' | 'settings' | 'workout' | 'exercise'
+export type AppView = 'today' | 'history' | 'workout-history' | 'more' | 'report' | 'routines' | 'exercises' | 'equipment-settings' | 'settings' | 'workout' | 'exercise'

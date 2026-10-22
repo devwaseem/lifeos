@@ -6,9 +6,10 @@
   import { getWorkoutPersonalRecords } from '$lib/personal-records'
   import { getExerciseTrackingMode } from '$lib/exercise-tracking'
   import { buildExerciseProgressionResults, buildSetProgressionTargets, defaultProgressionRule } from '$lib/progression'
+  import { getEquipmentWeightOptions } from '$lib/equipment-settings'
   import { routineMatchesWorkout } from '$lib/routines'
   import { getWorkoutStrengthHighlights } from '$lib/training-science'
-  import type { ExerciseDefinition, RoutineTemplate, WorkoutExercise, WorkoutFinishDecision, WorkoutSession, WorkoutSet } from '$lib/types'
+  import type { EquipmentSettings, ExerciseDefinition, RoutineTemplate, WorkoutExercise, WorkoutFinishDecision, WorkoutSession, WorkoutSet } from '$lib/types'
   import { DEFAULT_REST_SECONDS } from '$lib/workouts'
   import { formatCountdown, formatElapsed, formatVolume, getCompletedSetCount, getLiveWorkoutVolume, getWorkoutSetCount, newId } from '$lib/utils'
   import { countWorkingSets, createWorkoutSet, getLastWorkingSet, getMatchingPreviousSet, getPreviousWorkoutExercise, getWorkingSetNumber } from '$lib/workout-sets'
@@ -22,6 +23,7 @@
   export let workout: WorkoutSession
   export let workouts: WorkoutSession[]
   export let routines: RoutineTemplate[]
+  export let equipmentSettings: EquipmentSettings | null
   export let onBack: () => void
   export let onChange: (workout: WorkoutSession) => void
   export let customExercises: ExerciseDefinition[]
@@ -74,7 +76,10 @@
       notes: '',
       restSeconds: DEFAULT_REST_SECONDS,
       restUntil: null,
-      progression: defaultProgressionRule(definition.equipment),
+      progression: {
+        ...defaultProgressionRule(definition.equipment),
+        weightOptions: getEquipmentWeightOptions(equipmentSettings, definition.equipment),
+      },
       sets: [createWorkoutSet(false, getMatchingPreviousSet(
         getPreviousWorkoutExercise(workouts, definition.id),
         false,
