@@ -187,7 +187,7 @@
   $: finishDescription = `${completedSets} completed ${completedSets === 1 ? 'set' : 'sets'} across ${workout.exercises.length} ${workout.exercises.length === 1 ? 'exercise' : 'exercises'}.`
 </script>
 
-<div class="min-h-dvh bg-canvas pb-[calc(2rem+env(safe-area-inset-bottom))]">
+<div class={`min-h-dvh bg-canvas ${activeRest ? 'pb-[calc(14rem+env(safe-area-inset-bottom))]' : 'pb-[calc(2rem+env(safe-area-inset-bottom))]'}`}>
   <header class="sticky top-0 z-20 bg-canvas px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-6 lg:px-8">
     <div class="mx-auto flex max-w-7xl items-center gap-3">
       <button class="grid size-11 shrink-0 place-items-center rounded-full border border-ink" on:click={onBack} aria-label="Back to today"><ArrowLeft class="size-5" /></button>
@@ -214,16 +214,6 @@
     </dl>
   </section>
 
-  {#if activeRest}
-    <section class="sticky top-[4.25rem] z-10 border-b border-accent bg-accent px-3 py-3 text-accent-ink sm:px-6 lg:px-8" role="timer" aria-label={`Rest timer for ${activeRest.exerciseName}`}>
-      <div class="mx-auto flex max-w-7xl items-center gap-3">
-        <div class="min-w-0 flex-1"><p class="truncate text-xs font-medium uppercase">{activeRest.exerciseName}</p><p class="font-dot mt-1 text-2xl tabular-nums">{formatCountdown(activeRest.remaining)}</p></div>
-        <button class="min-h-11 rounded-full bg-accent-ink/10 px-3 text-sm font-medium" on:click={() => adjustRest(-15)} aria-label="Subtract 15 seconds">−15</button>
-        <button class="min-h-11 rounded-full bg-accent-ink/10 px-3 text-sm font-medium" on:click={() => adjustRest(15)} aria-label="Add 15 seconds">+15</button>
-        <button class="min-h-11 rounded-full bg-ink px-4 text-sm font-medium text-paper" on:click={skipRest}>Skip</button>
-      </div>
-    </section>
-  {/if}
 
   <main class="mx-auto max-w-7xl py-3 sm:px-6 sm:py-5 lg:px-8">
       <div>
@@ -314,6 +304,21 @@
       </div>
 
   </main>
+  {#if activeRest}
+    <section class="fixed inset-x-0 bottom-0 z-30 border-t border-accent bg-accent px-3 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-accent-ink sm:px-6 sm:pt-5 lg:left-56 lg:px-8" role="timer" aria-label={`Rest timer for ${activeRest.exerciseName}`}>
+      <div class="mx-auto max-w-2xl">
+        <div class="text-center">
+          <p class="truncate text-xs font-medium uppercase">{activeRest.exerciseName}</p>
+          <p class="font-dot mt-2 text-5xl leading-none tabular-nums sm:text-6xl">{formatCountdown(activeRest.remaining)}</p>
+        </div>
+        <div class="mt-4 grid grid-cols-3 gap-2 sm:mx-auto sm:max-w-md">
+          <button class="min-h-12 rounded-full bg-accent-ink/10 px-4 text-sm font-medium" on:click={() => adjustRest(-15)} aria-label="Subtract 15 seconds">−15</button>
+          <button class="min-h-12 rounded-full bg-accent-ink/10 px-4 text-sm font-medium" on:click={() => adjustRest(15)} aria-label="Add 15 seconds">+15</button>
+          <button class="min-h-12 rounded-full bg-ink px-4 text-sm font-medium text-paper" on:click={skipRest}>Skip</button>
+        </div>
+      </div>
+    </section>
+  {/if}
 </div>
 
 {#if maxEffortMoment}

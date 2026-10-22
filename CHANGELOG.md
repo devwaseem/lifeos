@@ -126,3 +126,4 @@
 - Added inferred rest-day guidance to Today while preserving the queued workout, including a deliberate train-anyway action that starts the queued routine.
 - Migrated local and synchronized cycle records by removing legacy rest slots, preserving the next routine, and storing the training-days-before-rest setting.
 - Simplified MCP client compatibility to a single rotatable Worker secret supplied through the endpoint’s `key` query parameter, while keeping the LifeOS application and synchronization endpoint protected by Cloudflare Access.
+- Moved the active rest timer to a bottom-docked panel with a larger centered countdown and its adjustment controls arranged below.
