@@ -57,6 +57,7 @@
 - Replaced the fixed 48-hour recovery flag with muscle-specific recovery windows and stimulus decay derived from completed sets, RPE, failure state, and exact set timestamps; historical records retain a workout-end fallback.
 - Added configurable per-exercise double progression with rep range, load step, and RPE ceiling controls in routine templates.
 - Added centralized equipment settings for exact dumbbell, cable, machine, and barbell racks; new workouts snapshot the matching non-linear rack and advance to the next available load instead of assuming a fixed increment.
+- Replaced comma-only equipment rack fields with mobile-friendly single-load entry, removable weight chips, and retained comma- or space-separated paste support.
 - Moved execution targets to their matching active-workout set rows and details: add a rep below the ceiling, increase weight and reset at the ceiling, or repeat after failure or excessive RPE.
 - Added a three-day systemic-fatigue governor that intercepts routine and custom workout starts until the user explicitly chooses Force override.
 - Added one editable training cycle composed from existing routines and explicit recovery slots, including duplication, reordering, manual positioning, and offline persistence.
