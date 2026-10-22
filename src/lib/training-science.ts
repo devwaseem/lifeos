@@ -98,29 +98,38 @@ export function estimateSetE1rm(set: WorkoutSet): number | null {
   return round(set.weight * (1 + repsAtFailure / 30), 1)
 }
 
-function collectExerciseExposures(exerciseId: string, workouts: WorkoutSession[]) {
-  const exposures: ExerciseExposure[] = []
-  for (const workout of workouts) {
-    if (workout.status === 'cancelled') continue
-    const exercise = workout.exercises.find((candidate) => candidate.exerciseId === exerciseId)
-    if (!exercise) continue
-    const completed = exercise.sets.filter((set) => set.completed && !set.warmup)
-    const estimates = completed.map(estimateSetE1rm).filter((value): value is number => value !== null)
-    if (estimates.length === 0) continue
-    const rpes = completed.map((set) => set.rpe).filter((value): value is number => value !== null)
-    exposures.push({
-      name: exercise.name,
-      timestamp: new Date(workout.completedAt ?? workout.startedAt).getTime(),
-      estimated1Rm: Math.max(...estimates),
-      averageRpe: rpes.length > 0 ? mean(rpes) : null,
-      maxEffortRate: completed.length > 0 ? completed.filter((set) => set.rpe === 10).length / completed.length : 0,
-    })
+function exerciseExposure(exercise: WorkoutExercise, workout: WorkoutSession): ExerciseExposure | null {
+  const completed = exercise.sets.filter((set) => set.completed && !set.warmup)
+  const estimates = completed.map(estimateSetE1rm).filter((value): value is number => value !== null)
+  if (estimates.length === 0) return null
+  const rpes = completed.map((set) => set.rpe).filter((value): value is number => value !== null)
+  const timestamp = new Date(workout.completedAt ?? workout.startedAt).getTime()
+  if (!Number.isFinite(timestamp)) return null
+  return {
+    name: exercise.name,
+    timestamp,
+    estimated1Rm: Math.max(...estimates),
+    averageRpe: rpes.length > 0 ? mean(rpes) : null,
+    maxEffortRate: completed.length > 0 ? completed.filter((set) => set.rpe === 10).length / completed.length : 0,
   }
-  return exposures.filter((exposure) => Number.isFinite(exposure.timestamp)).sort((a, b) => b.timestamp - a.timestamp)
 }
 
-export function getExerciseStrengthProfile(exerciseId: string, workouts: WorkoutSession[]): StrengthProfile {
-  const exposures = collectExerciseExposures(exerciseId, workouts)
+function collectExerciseExposuresById(exerciseIds: Iterable<string>, workouts: WorkoutSession[]) {
+  const requested = new Set(exerciseIds)
+  const exposures = new Map<string, ExerciseExposure[]>([...requested].map((id) => [id, []]))
+  for (const workout of workouts) {
+    if (workout.status === 'cancelled') continue
+    for (const exercise of workout.exercises) {
+      if (!requested.has(exercise.exerciseId)) continue
+      const exposure = exerciseExposure(exercise, workout)
+      if (exposure) exposures.get(exercise.exerciseId)?.push(exposure)
+    }
+  }
+  for (const entries of exposures.values()) entries.sort((a, b) => b.timestamp - a.timestamp)
+  return exposures
+}
+
+function strengthProfile(exposures: ExerciseExposure[]): StrengthProfile {
   const withRpe = exposures.filter((exposure) => exposure.averageRpe !== null).length
   const rpeCoverage = exposures.length > 0 ? withRpe / exposures.length : 0
   const recent = exposures.slice(0, 3)
@@ -138,6 +147,19 @@ export function getExerciseStrengthProfile(exerciseId: string, workouts: Workout
     rpeCoverage,
     confidence: confidenceFor(exposures.length, rpeCoverage),
   }
+}
+
+export function getExerciseStrengthProfiles(exerciseIds: Iterable<string>, workouts: WorkoutSession[]) {
+  const exposures = collectExerciseExposuresById(exerciseIds, workouts)
+  return new Map([...exposures].map(([id, entries]) => [id, strengthProfile(entries)]))
+}
+
+function collectExerciseExposures(exerciseId: string, workouts: WorkoutSession[]) {
+  return collectExerciseExposuresById([exerciseId], workouts).get(exerciseId) ?? []
+}
+
+export function getExerciseStrengthProfile(exerciseId: string, workouts: WorkoutSession[]): StrengthProfile {
+  return getExerciseStrengthProfiles([exerciseId], workouts).get(exerciseId) ?? strengthProfile([])
 }
 
 

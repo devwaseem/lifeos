@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RoutineTemplate, TrainingProfile, WorkoutCheckIn, WorkoutSession } from '../types'
+import type { RoutineTemplate, TrainingProfile, WorkoutCheckIn, WorkoutSession } from './types'
 import { buildExerciseProgress, buildRoutineReview, buildTrainingOverview, type TrainingDataset } from './training-analysis'
 
 const now = Date.parse('2026-10-20T12:00:00.000Z')

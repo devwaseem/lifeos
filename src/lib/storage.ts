@@ -1,3 +1,5 @@
+import type { AiSettings } from '$lib/ai-coach'
+import type { AiInsight, AiInsightKind } from '$lib/ai-insights'
 import type { AppleHealthExportRecord } from '$lib/apple-health'
 import type { ExerciseDefinition, ExerciseVideo, RoutineTemplate, SyncSettings, TrainingCycle, TrainingProfile, WorkoutSession } from '$lib/types'
 import { normalizeExerciseDefinition } from '$lib/muscle-contributions'
@@ -16,6 +18,7 @@ const TRAINING_PROFILE_STORE = 'training-profile'
 const META_STORE = 'meta'
 const SETTINGS_KEY = 'sync-settings'
 const APPLE_HEALTH_EXPORTS_KEY = 'apple-health-exports'
+const AI_SETTINGS_KEY = 'ai-settings'
 
 interface MetaRecord<T> {
   key: string
@@ -289,5 +292,118 @@ export async function deleteAppleHealthExport(workoutId: string) {
     key: APPLE_HEALTH_EXPORTS_KEY,
     value: exports.filter((record) => record.workoutId !== workoutId),
   } satisfies MetaRecord<AppleHealthExportRecord[]>)
+  await transactionComplete(transaction)
+}
+
+function normalizeAiSettings(value: unknown): AiSettings {
+  if (!value || typeof value !== 'object') return { provider: 'gemini', models: {}, apiKeys: {}, cloudflareAccountId: '' }
+  const candidate = value as Partial<AiSettings>
+  const provider = candidate.provider === 'workers-ai' || candidate.provider === 'gemini' || candidate.provider === 'anthropic'
+    ? candidate.provider
+    : 'gemini'
+  const models: AiSettings['models'] = {}
+  const apiKeys: AiSettings['apiKeys'] = {}
+  if (candidate.models && typeof candidate.models === 'object') {
+    for (const id of ['workers-ai', 'gemini', 'anthropic'] as const) {
+      const model = candidate.models[id]
+      if (typeof model === 'string' && model.trim() && model.length <= 200) models[id] = model.trim()
+    }
+  }
+  if (candidate.apiKeys && typeof candidate.apiKeys === 'object') {
+    for (const id of ['workers-ai', 'gemini', 'anthropic'] as const) {
+      const apiKey = candidate.apiKeys[id]
+      if (typeof apiKey === 'string' && apiKey.trim() && apiKey.length <= 4096) apiKeys[id] = apiKey.trim()
+    }
+  }
+  const cloudflareAccountId = typeof candidate.cloudflareAccountId === 'string' && candidate.cloudflareAccountId.length <= 64
+    ? candidate.cloudflareAccountId.trim()
+    : ''
+  return { provider, models, apiKeys, cloudflareAccountId }
+}
+
+export async function getAiSettings() {
+  const database = await openDatabase()
+  const transaction = database.transaction(META_STORE, 'readonly')
+  const record = await requestResult(
+    transaction.objectStore(META_STORE).get(AI_SETTINGS_KEY) as IDBRequest<MetaRecord<unknown> | undefined>,
+  )
+  await transactionComplete(transaction)
+  return normalizeAiSettings(record?.value)
+}
+
+export async function saveAiSettings(settings: AiSettings) {
+  const database = await openDatabase()
+  const transaction = database.transaction(META_STORE, 'readwrite')
+  transaction.objectStore(META_STORE).put({
+    key: AI_SETTINGS_KEY,
+    value: normalizeAiSettings(settings),
+  } satisfies MetaRecord<AiSettings>)
+  await transactionComplete(transaction)
+}
+
+
+export interface StoredAiInsight {
+  question: string | null
+  insight: AiInsight
+}
+
+function aiInsightKey(kind: AiInsightKind, subjectId: string) {
+  return `ai-insight:${kind}:${kind === 'natural-language' ? 'latest' : subjectId}`
+}
+
+function isAiInsight(value: unknown): value is AiInsight {
+  if (!value || typeof value !== 'object') return false
+  const insight = value as Partial<AiInsight>
+  const validKind = insight.kind === 'natural-language'
+    || insight.kind === 'workout-review'
+    || insight.kind === 'routine-review'
+    || insight.kind === 'exercise-substitutions'
+    || insight.kind === 'progress-analysis'
+    || insight.kind === 'training-report'
+  return validKind
+    && typeof insight.headline === 'string'
+    && typeof insight.summary === 'string'
+    && Array.isArray(insight.findings)
+    && insight.findings.every((finding) => finding
+      && typeof finding === 'object'
+      && typeof finding.title === 'string'
+      && typeof finding.detail === 'string'
+      && Array.isArray(finding.evidence))
+    && Array.isArray(insight.actions)
+    && Array.isArray(insight.evidence)
+    && typeof insight.caveat === 'string'
+    && typeof insight.generatedAt === 'string'
+    && typeof insight.contextAsOf === 'string'
+    && Boolean(insight.provider
+      && (insight.provider.id === 'workers-ai' || insight.provider.id === 'gemini' || insight.provider.id === 'anthropic')
+      && typeof insight.provider.label === 'string'
+      && typeof insight.provider.model === 'string')
+}
+
+export async function getAiInsightResult(kind: AiInsightKind, subjectId = ''): Promise<StoredAiInsight | null> {
+  const database = await openDatabase()
+  const transaction = database.transaction(META_STORE, 'readonly')
+  const record = await requestResult(
+    transaction.objectStore(META_STORE).get(aiInsightKey(kind, subjectId)) as IDBRequest<MetaRecord<unknown> | undefined>,
+  )
+  await transactionComplete(transaction)
+  if (!record?.value || typeof record.value !== 'object') return null
+  const candidate = record.value as Partial<StoredAiInsight>
+  if (!isAiInsight(candidate.insight) || candidate.insight.kind !== kind) return null
+  const question = typeof candidate.question === 'string' && candidate.question.length <= 500 ? candidate.question : null
+  return { question, insight: candidate.insight }
+}
+
+export async function saveAiInsightResult(insight: AiInsight, question: string | null) {
+  const database = await openDatabase()
+  const transaction = database.transaction(META_STORE, 'readwrite')
+  const record: StoredAiInsight = {
+    question: question?.trim().slice(0, 500) || null,
+    insight,
+  }
+  transaction.objectStore(META_STORE).put({
+    key: aiInsightKey(insight.kind, insight.subject?.id ?? ''),
+    value: record,
+  } satisfies MetaRecord<StoredAiInsight>)
   await transactionComplete(transaction)
 }

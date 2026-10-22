@@ -1,7 +1,7 @@
-import { getMuscleContributions } from '../muscle-contributions'
-import { getExerciseStrengthProfile, getFatigueSignal, getMuscleDose, getSystemicLoad, estimateSetE1rm, type EvidenceConfidence } from '../training-science'
-import { getTrainingReadiness } from '../training-readiness'
-import type { RoutineTemplate, TrainingCycle, TrainingProfile, WorkoutCheckIn, WorkoutSession } from '../types'
+import { getMuscleContributions } from './muscle-contributions'
+import { getExerciseStrengthProfile, getFatigueSignal, getMuscleDose, getSystemicLoad, estimateSetE1rm, type EvidenceConfidence } from './training-science'
+import { getTrainingReadiness } from './training-readiness'
+import type { RoutineTemplate, TrainingCycle, TrainingProfile, WorkoutCheckIn, WorkoutSession } from './types'
 
 const ANALYTICS_VERSION = '2026-10-20'
 const STALE_AFTER_MS = 30 * 60_000

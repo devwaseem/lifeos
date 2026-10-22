@@ -1,6 +1,6 @@
 import type { TrainingProfile, WorkoutCheckIn } from '../types'
 import { readTrainingSnapshot } from './training-sync-store'
-import type { TrainingDataset } from './training-analysis'
+import type { TrainingDataset } from '../training-analysis'
 
 interface TrainingProfileRow {
   id: TrainingProfile['id']

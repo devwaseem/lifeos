@@ -9,6 +9,15 @@ declare global {
         MCP_RESOURCE_URL?: string
         MCP_ALLOWED_HOSTS?: string
         MCP_ALLOWED_ORIGINS?: string
+        AI?: Ai
+        AI_DEFAULT_PROVIDER?: 'workers-ai' | 'gemini' | 'anthropic'
+        CLOUDFLARE_AI_MODEL?: string
+        GEMINI_API_KEY?: string
+        GEMINI_MODEL?: string
+        GEMINI_BASE_URL?: string
+        ANTHROPIC_API_KEY?: string
+        ANTHROPIC_MODEL?: string
+        ANTHROPIC_BASE_URL?: string
       }
       context: ExecutionContext
       caches: CacheStorage

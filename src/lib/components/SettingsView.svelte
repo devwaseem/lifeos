@@ -1,7 +1,9 @@
 <script lang="ts">
   import { ArrowLeft, Cloud, Database, RefreshCw } from '@lucide/svelte'
-  import TrainingProfileForm from './TrainingProfileForm.svelte'
+  import type { AiSettings } from '$lib/ai-coach'
   import type { SyncSettings, TrainingProfile } from '$lib/types'
+  import AiProviderSettings from './AiProviderSettings.svelte'
+  import TrainingProfileForm from './TrainingProfileForm.svelte'
   import { formatShortDate, formatTime } from '$lib/utils'
 
   export let initialSettings: SyncSettings
@@ -11,6 +13,8 @@
   export let onSync: () => Promise<void>
   export let trainingProfile: TrainingProfile | null
   export let onSaveProfile: (profile: TrainingProfile) => void
+  export let aiSettings: AiSettings
+  export let onSaveAiSettings: (settings: AiSettings) => void
 </script>
 
 <div class="mx-auto w-full max-w-5xl px-5 py-6 sm:px-6 lg:px-8 lg:py-7">
@@ -33,6 +37,7 @@
   </form>
 
   <div class="mt-10">
-    <TrainingProfileForm profile={trainingProfile} onSave={onSaveProfile} />
+    <AiProviderSettings settings={aiSettings} onSave={onSaveAiSettings} />
+    <div class="mt-3"><TrainingProfileForm profile={trainingProfile} onSave={onSaveProfile} /></div>
   </div>
 </div>

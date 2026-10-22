@@ -152,4 +152,4 @@ export interface TrainingProfile {
 }
 
 
-export type AppView = 'today' | 'history' | 'workout-history' | 'more' | 'routines' | 'exercises' | 'settings' | 'workout' | 'exercise'
+export type AppView = 'today' | 'history' | 'workout-history' | 'more' | 'report' | 'routines' | 'exercises' | 'settings' | 'workout' | 'exercise'

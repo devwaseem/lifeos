@@ -9,6 +9,8 @@ MCP_SHARED_KEY = "lifeos-mcp-local-dev"
 MCP_RESOURCE_URL = "http://localhost:8787/mcp"
 MCP_ALLOWED_HOSTS = "localhost,127.0.0.1"
 MCP_ALLOWED_ORIGINS = "http://localhost:5173"
+CLOUDFLARE_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+GEMINI_MODEL = "gemini-3.8-flash"
 
 [[d1_databases]]
 binding = "DB"

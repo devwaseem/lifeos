@@ -1,12 +1,14 @@
 <script lang="ts">
   import { ArrowLeft, Check, ChevronRight, HeartPulse, Trash2 } from '@lucide/svelte'
   import type { AppleHealthExportRecord } from '$lib/apple-health'
+  import type { AiSettings } from '$lib/ai-coach'
   import { getExerciseTrackingMode } from '$lib/exercise-tracking'
   import { buildExerciseProgressionResults } from '$lib/progression'
-  import type { WorkoutSession } from '$lib/types'
+  import type { ExerciseDefinition, RoutineTemplate, TrainingProfile, WorkoutSession } from '$lib/types'
   import { formatDuration, formatShortDate, formatTime, formatVolume, getCompletedSetCount, getWorkoutVolume } from '$lib/utils'
   import { getWorkingSetNumber } from '$lib/workout-sets'
   import ConfirmDialog from './ConfirmDialog.svelte'
+  import ContextualAiInsight from './ContextualAiInsight.svelte'
   import ReadOnlyWorkoutSetHeader from './ReadOnlyWorkoutSetHeader.svelte'
   import ReadOnlyWorkoutSetRow from './ReadOnlyWorkoutSetRow.svelte'
   import ExerciseProgressionSignal from './ExerciseProgressionSignal.svelte'
@@ -19,6 +21,11 @@
   export let appleHealthExport: AppleHealthExportRecord | undefined
   export let canExportToAppleHealth = false
   export let onExportAppleHealth: () => void
+  export let routines: RoutineTemplate[]
+  export let exercises: ExerciseDefinition[]
+  export let trainingProfile: TrainingProfile | null
+  export let aiSettings: AiSettings
+  export let online: boolean
 
   let deleteDialog: ConfirmDialog
   $: completedExercises = workout.exercises.filter((exercise) => exercise.sets.some((set) => set.completed))
@@ -38,6 +45,22 @@
     <div class="min-w-0 px-3 py-4 sm:px-5"><dt class="text-[0.6875rem] font-medium uppercase text-muted">Sets</dt><dd class="font-dot mt-2 truncate text-xl tabular-nums sm:text-2xl">{getCompletedSetCount(workout)}</dd></div>
     <div class="min-w-0 px-3 py-4 sm:px-5"><dt class="text-[0.6875rem] font-medium uppercase text-muted">Volume</dt><dd class="font-dot mt-2 truncate text-xl tabular-nums sm:text-2xl">{formatVolume(getWorkoutVolume(workout))}<span class="font-sans ml-1 text-[0.6875rem] text-muted">kg</span></dd></div>
   </dl>
+
+  <div class="mt-6">
+    <ContextualAiInsight
+      kind="workout-review"
+      subjectId={workout.id}
+      title="Review this workout"
+      description="Compare this session’s performance and effort with prior same-exercise history."
+      actionLabel="Review this workout"
+      {workouts}
+      {routines}
+      {exercises}
+      {trainingProfile}
+      {aiSettings}
+      {online}
+    />
+  </div>
 
   {#if workout.checkIn}
     <section class="mt-6 rounded-2xl bg-paper p-5" aria-labelledby="pre-workout-check-in-heading">

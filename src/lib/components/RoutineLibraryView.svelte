@@ -1,11 +1,13 @@
 <script lang="ts">
   import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, Dumbbell, Pencil, Play, Plus, Trash2, X } from '@lucide/svelte'
   import { tick } from 'svelte'
-  import type { ExerciseDefinition, ProgressionRule, RoutineExercise, RoutineTemplate, TrainingCycle, WorkoutSession } from '$lib/types'
+  import type { AiSettings } from '$lib/ai-coach'
+  import type { ExerciseDefinition, ProgressionRule, RoutineExercise, RoutineTemplate, TrainingCycle, TrainingProfile, WorkoutSession } from '$lib/types'
   import { createRoutineExercise, getRoutineMuscleGroups } from '$lib/routines'
   import { supportsProgression } from '$lib/progression'
   import { newId } from '$lib/utils'
   import ConfirmDialog from './ConfirmDialog.svelte'
+  import ContextualAiInsight from './ContextualAiInsight.svelte'
   import ExercisePicker from './ExercisePicker.svelte'
   import TrainingCyclePanel from './TrainingCyclePanel.svelte'
 
@@ -20,6 +22,11 @@
   export let onCreateExercise: (exercise: ExerciseDefinition) => void
   export let onSaveCycle: (cycle: TrainingCycle) => void
   export let onDeleteCycle: (cycle: TrainingCycle) => void
+  export let workouts: WorkoutSession[]
+  export let exercises: ExerciseDefinition[]
+  export let trainingProfile: TrainingProfile | null
+  export let aiSettings: AiSettings
+  export let online: boolean
 
   let editor: HTMLDialogElement
   let deleteDialog: ConfirmDialog
@@ -126,6 +133,23 @@
           <div class="mt-6 grid grid-cols-[1fr_auto] gap-2">
             <button class="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-ink px-4 text-sm font-medium text-paper disabled:bg-panel-deep disabled:text-muted" disabled={Boolean(activeWorkout)} on:click={() => onStart(routine)}><Play class="size-4" />{activeWorkout ? 'Workout active' : 'Start routine'}</button>
             <button class="grid size-12 place-items-center rounded-xl bg-danger-soft text-danger" on:click={() => askToDelete(routine)} aria-label={`Delete ${routine.name}`}><Trash2 class="size-4" /></button>
+          </div>
+          <div class="mt-2">
+            <ContextualAiInsight
+              kind="routine-review"
+              subjectId={routine.id}
+              title={`Review ${routine.name}`}
+              description="Check this routine’s exercise selection and set distribution against your profile and logged trends."
+              actionLabel="Review routine with AI"
+              {workouts}
+              {routines}
+              {exercises}
+              {trainingProfile}
+              {aiSettings}
+              {online}
+              collapsible={true}
+              initiallyOpen={false}
+            />
           </div>
         </article>
       {/each}

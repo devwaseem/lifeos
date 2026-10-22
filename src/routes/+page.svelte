@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
   import type { TransitionConfig } from 'svelte/transition'
+  import type { AiSettings } from '$lib/ai-coach'
   import { createAppleHealthShortcutUrl, createPendingAppleHealthExport, isAppleHealthShortcutAvailable, type AppleHealthExportRecord } from '$lib/apple-health'
   import ActiveWorkoutView from '$lib/components/ActiveWorkoutView.svelte'
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte'
@@ -9,6 +10,7 @@
   import ExerciseLibraryView from '$lib/components/ExerciseLibraryView.svelte'
   import HistoryView from '$lib/components/HistoryView.svelte'
   import MoreView from '$lib/components/MoreView.svelte'
+  import TrainingProgressReport from '$lib/components/TrainingProgressReport.svelte'
   import WorkoutCompleteDialog from '$lib/components/WorkoutCompleteDialog.svelte'
   import WorkoutHistoryDetailView from '$lib/components/WorkoutHistoryDetailView.svelte'
   import RoutineLibraryView from '$lib/components/RoutineLibraryView.svelte'
@@ -17,10 +19,12 @@
   import WorkoutStartDialog from '$lib/components/WorkoutStartDialog.svelte'
   import WorkoutCheckInDialog from '$lib/components/WorkoutCheckInDialog.svelte'
   import { createDemoWorkouts } from '$lib/data/demo-workouts'
+  import { exerciseLibrary } from '$lib/data/exercises'
   import { createOneOffWorkout, createWorkoutFromRoutine, routineFromWorkout } from '$lib/routines'
-  import { deleteAppleHealthExport, deleteExerciseVideo, getAppleHealthExports, getCustomExercises, getExerciseVideos, getRoutines, getSyncSettings, getTrainingCycle, getTrainingProfile, getWorkouts, replaceRoutines, replaceTrainingCycle, replaceTrainingProfile, replaceWorkouts, saveAppleHealthExport, saveCustomExercise, saveExerciseVideo, saveRoutine, saveSyncSettings, saveTrainingCycle, saveTrainingProfile, saveWorkout } from '$lib/storage'
+  import { deleteAppleHealthExport, deleteExerciseVideo, getAiSettings, getAppleHealthExports, getCustomExercises, getExerciseVideos, getRoutines, getSyncSettings, getTrainingCycle, getTrainingProfile, getWorkouts, replaceRoutines, replaceTrainingCycle, replaceTrainingProfile, replaceWorkouts, saveAiSettings, saveAppleHealthExport, saveCustomExercise, saveExerciseVideo, saveRoutine, saveSyncSettings, saveTrainingCycle, saveTrainingProfile, saveWorkout } from '$lib/storage'
   import { mergeRoutines, mergeTrainingCycle, mergeTrainingProfile, mergeWorkouts, syncData } from '$lib/sync'
   import { advanceTrainingCycleForWorkout, removeRoutineFromTrainingCycle } from '$lib/training-cycle'
+  import { buildTrainingProgressReport } from '$lib/training-progress-report'
   import { getConsecutiveLoadDays } from '$lib/training-readiness'
   import type { AppView, ExerciseDefinition, ExerciseVideo, RoutineTemplate, SyncSettings, TrainingCycle, TrainingProfile, WorkoutCheckIn, WorkoutFinishDecision, WorkoutSession } from '$lib/types'
 
@@ -41,6 +45,7 @@
   let now = Date.now()
   let syncState: 'idle' | 'syncing' | 'success' | 'error' = 'idle'
   let syncError: string | null = null
+  let aiSettings: AiSettings = { provider: 'gemini', models: {}, apiKeys: {}, cloudflareAccountId: '' }
   let dataError: string | null = null
   let appleHealthExports: AppleHealthExportRecord[] = []
   let canExportToAppleHealth = false
@@ -59,6 +64,7 @@
     history: 0,
     today: 0,
     more: 0,
+    report: 1,
     'workout-history': 1,
     routines: 1,
     exercises: 1,
@@ -68,7 +74,7 @@
   }
   const rootViewOrder: Partial<Record<AppView, number>> = { history: 0, today: 1, more: 2 }
   const navigationStateKey = 'lifeosNavigation'
-  const appViews = new Set<AppView>(['history', 'today', 'more', 'workout-history', 'routines', 'exercises', 'settings', 'exercise', 'workout'])
+  const appViews = new Set<AppView>(['history', 'today', 'more', 'report', 'workout-history', 'routines', 'exercises', 'settings', 'exercise', 'workout'])
   let pageDirection: -1 | 0 | 1 = 1
   let navigationIndex = 0
   let navigationReady = false
@@ -297,11 +303,40 @@
     }
   }
 
+  function createProgressReport(_sourceVersion: string) {
+    let latestCheckIn: WorkoutCheckIn | null = null
+    let latestWorkoutUpdatedAt: string | null = null
+    for (const workout of workouts) {
+      if (!latestWorkoutUpdatedAt || workout.updatedAt > latestWorkoutUpdatedAt) latestWorkoutUpdatedAt = workout.updatedAt
+      if (workout.checkIn && (!latestCheckIn || workout.checkIn.recordedAt > latestCheckIn.recordedAt)) latestCheckIn = workout.checkIn
+    }
+    return buildTrainingProgressReport({
+      workouts,
+      routines,
+      trainingCycle,
+      profile: trainingProfile,
+      latestCheckIn,
+      freshness: {
+        latestDeviceSyncAt: settings.lastSyncedAt,
+        latestWorkoutUpdatedAt,
+      },
+    })
+  }
+
   $: activeWorkout = workouts.find((workout) => workout.status === 'active')
   $: visibleRoutines = routines.filter((routine) => !routine.deletedAt)
   $: selectedWorkout = workouts.find((workout) => workout.id === selectedWorkoutId)
+  $: allExercises = [...exerciseLibrary, ...customExercises]
   $: syncLabel = settings.lastSyncedAt ? 'Saved locally & synced' : 'Saved locally'
   $: selectedAppleHealthExport = appleHealthExports.find((record) => record.workoutId === selectedWorkoutId)
+  $: reportSourceVersion = [
+    ...workouts.map((workout) => `${workout.id}:${workout.updatedAt}`),
+    ...routines.map((routine) => `${routine.id}:${routine.updatedAt}`),
+    trainingCycle ? `${trainingCycle.id}:${trainingCycle.updatedAt}` : 'no-cycle',
+    trainingProfile?.updatedAt ?? 'no-profile',
+    settings.lastSyncedAt ?? 'not-synced',
+  ].join('|')
+  $: progressReport = createProgressReport(reportSourceVersion)
 
   onMount(() => {
     let cancelled = false
@@ -314,8 +349,8 @@
     window.addEventListener('offline', handleOffline)
     window.addEventListener('popstate', handlePopState)
 
-    Promise.all([getWorkouts(), getRoutines(), getTrainingCycle(), getSyncSettings(), getCustomExercises(), getExerciseVideos(), getAppleHealthExports(), getTrainingProfile()])
-      .then(async ([storedWorkouts, storedRoutines, storedTrainingCycle, storedSettings, storedCustomExercises, storedExerciseVideos, storedAppleHealthExports, storedTrainingProfile]) => {
+    Promise.all([getWorkouts(), getRoutines(), getTrainingCycle(), getSyncSettings(), getCustomExercises(), getExerciseVideos(), getAppleHealthExports(), getTrainingProfile(), getAiSettings()])
+      .then(async ([storedWorkouts, storedRoutines, storedTrainingCycle, storedSettings, storedCustomExercises, storedExerciseVideos, storedAppleHealthExports, storedTrainingProfile, storedAiSettings]) => {
         if (cancelled) return
         const demoWorkouts = createDemoWorkouts()
         demoWorkouts.forEach((workout) => demoWorkoutIds.add(workout.id))
@@ -344,6 +379,7 @@
         exerciseVideos = storedExerciseVideos
         appleHealthExports = storedAppleHealthExports
         trainingProfile = storedTrainingProfile
+        aiSettings = storedAiSettings
 
         if (canSync) {
           const synced = await performSync(
@@ -502,6 +538,12 @@
     if (navigator.onLine) void performSync(settings, workouts, routines, trainingCycle, profile)
   }
 
+  function storeAiSettings(nextSettings: AiSettings) {
+    aiSettings = nextSettings
+    saveAiSettings(nextSettings).catch(() => { dataError = 'The AI provider preference could not be saved locally.' })
+  }
+
+
 
   function requestWorkoutStart() {
     if (activeWorkout) { navigate('workout'); return }
@@ -581,7 +623,7 @@
     selectedExerciseName = exerciseName
     exerciseBackView = view === 'exercises'
       ? 'exercises'
-      : view === 'workout' || view === 'workout-history'
+      : view === 'today' || view === 'workout' || view === 'workout-history' || view === 'report'
         ? view
         : 'history'
     navigate('exercise')
@@ -745,31 +787,35 @@
       {#key view}
         <div class="page-panel" in:pageIn out:pageOut>
           {#if view === 'today'}
-            <TodayView {workouts} routines={visibleRoutines} {activeWorkout} {trainingCycle} {selectedRoutineId} {now} onSelectRoutine={selectTodayRoutine} onStartRoutine={startRoutine} onStartCycleRoutine={startCycleRoutine} onStart={requestWorkoutStart} onResume={() => navigate('workout')} onManageRoutines={() => navigate('routines')} onViewHistory={() => navigate('history')} />
+            <TodayView {workouts} routines={visibleRoutines} {activeWorkout} {trainingCycle} {selectedRoutineId} {now} {progressReport} {aiSettings} {online} onSelectRoutine={selectTodayRoutine} onStartRoutine={startRoutine} onStartCycleRoutine={startCycleRoutine} onStart={requestWorkoutStart} onResume={() => navigate('workout')} onManageRoutines={() => navigate('routines')} onViewReport={() => navigate('report')} onOpenExercise={openExercise} />
           {:else if view === 'history'}
             <HistoryView {workouts} onStart={requestWorkoutStart} onOpenWorkout={openWorkout} />
           {:else if view === 'workout-history' && selectedWorkout}
-            <WorkoutHistoryDetailView workout={selectedWorkout} {workouts} appleHealthExport={selectedAppleHealthExport} {canExportToAppleHealth} onExportAppleHealth={() => { void exportWorkoutToAppleHealth(selectedWorkout) }} onBack={() => navigateBack('history')} onOpenExercise={openExercise} onDelete={deleteSavedWorkout} />
+            <WorkoutHistoryDetailView workout={selectedWorkout} {workouts} routines={visibleRoutines} exercises={allExercises} {trainingProfile} {aiSettings} {online} appleHealthExport={selectedAppleHealthExport} {canExportToAppleHealth} onExportAppleHealth={() => { void exportWorkoutToAppleHealth(selectedWorkout) }} onBack={() => navigateBack('history')} onOpenExercise={openExercise} onDelete={deleteSavedWorkout} />
           {:else if view === 'more'}
             <MoreView {online} {syncLabel} onNavigate={navigate} />
+          {:else if view === 'report'}
+            <TrainingProgressReport report={progressReport} {aiSettings} {online} onBack={() => navigateBack('more')} onOpenExercise={openExercise} />
           {:else if view === 'routines'}
-            <RoutineLibraryView routines={visibleRoutines} {trainingCycle} {customExercises} {activeWorkout} onBack={() => navigateBack('more')} onSave={storeRoutine} onDelete={deleteRoutine} onStart={requestRoutineStart} onCreateExercise={createExercise} onSaveCycle={storeTrainingCycle} onDeleteCycle={deleteTrainingCycle} />
+            <RoutineLibraryView routines={visibleRoutines} {workouts} exercises={allExercises} {trainingProfile} {aiSettings} {online} {trainingCycle} {customExercises} {activeWorkout} onBack={() => navigateBack('more')} onSave={storeRoutine} onDelete={deleteRoutine} onStart={requestRoutineStart} onCreateExercise={createExercise} onSaveCycle={storeTrainingCycle} onDeleteCycle={deleteTrainingCycle} />
           {:else if view === 'exercises'}
             <ExerciseLibraryView {customExercises} onBack={() => navigateBack('more')} onCreate={createExercise} onOpenExercise={openExercise} />
           {:else if view === 'settings'}
-            {#key `${settings.deviceId}:${settings.lastSyncedAt ?? 'never'}:${trainingProfile?.updatedAt ?? 'no-profile'}`}
+            {#key `${settings.deviceId}:${settings.lastSyncedAt ?? 'never'}:${trainingProfile?.updatedAt ?? 'no-profile'}:${aiSettings.provider}`}
               <SettingsView
                 initialSettings={settings}
                 {syncState}
                 {syncError}
                 {trainingProfile}
+                {aiSettings}
                 onBack={() => navigateBack('more')}
                 onSync={handleSync}
                 onSaveProfile={storeTrainingProfile}
+                onSaveAiSettings={storeAiSettings}
               />
             {/key}
           {:else if view === 'exercise' && selectedExerciseId}
-            <ExerciseDetailView exerciseId={selectedExerciseId} exerciseName={selectedExerciseName} {workouts} videos={exerciseVideos.filter((video) => video.exerciseId === selectedExerciseId)} onSaveVideo={addExerciseVideo} onDeleteVideo={removeExerciseVideo} onBack={() => navigateBack(exerciseBackView)} />
+            <ExerciseDetailView exerciseId={selectedExerciseId} exerciseName={selectedExerciseName} {workouts} routines={visibleRoutines} exercises={allExercises} {trainingProfile} {aiSettings} {online} videos={exerciseVideos.filter((video) => video.exerciseId === selectedExerciseId)} onSaveVideo={addExerciseVideo} onDeleteVideo={removeExerciseVideo} onBack={() => navigateBack(exerciseBackView)} />
           {:else if view === 'workout' && activeWorkout}
             <ActiveWorkoutView workout={activeWorkout} {workouts} routines={visibleRoutines} onBack={() => navigateBack('today')} onChange={updateWorkout} {customExercises} onCreateExercise={createExercise} onOpenExercise={openExercise} onFinish={finishWorkout} onCancel={cancelWorkout} />
           {/if}

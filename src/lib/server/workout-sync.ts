@@ -1,13 +1,12 @@
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose'
 import type { RoutineTemplate, TrainingCycle, TrainingProfile, WorkoutCheckIn, WorkoutSession } from '../types'
+import { authenticateOwnerRequest, type OwnerAuthEnvironment } from './owner-auth'
 import { recordDeviceSync, syncTrainingContext } from './training-context-store'
 import { syncTrainingData } from './training-sync-store'
 
-export interface WorkoutSyncEnvironment {
+const MAX_SYNC_PAYLOAD_BYTES = 5 * 1024 * 1024
+
+export interface WorkoutSyncEnvironment extends OwnerAuthEnvironment {
   DB: D1Database
-  LOCAL_SYNC_TOKEN?: string
-  CF_ACCESS_TEAM_DOMAIN?: string
-  CF_ACCESS_AUD?: string
 }
 
 interface SyncBody {
@@ -20,42 +19,6 @@ interface SyncBody {
 }
 
 
-const MAX_SYNC_PAYLOAD_BYTES = 5 * 1024 * 1024
-
-const accessKeySets = new Map<string, JWTVerifyGetKey>()
-
-async function authenticateSyncRequest(request: Request, environment: WorkoutSyncEnvironment) {
-  if (environment.LOCAL_SYNC_TOKEN) {
-    return request.headers.get('Authorization') === `Bearer ${environment.LOCAL_SYNC_TOKEN}`
-      ? 'local-development'
-      : null
-  }
-
-  if (!environment.CF_ACCESS_TEAM_DOMAIN || !environment.CF_ACCESS_AUD) return null
-  const assertion = request.headers.get('Cf-Access-Jwt-Assertion')
-  if (!assertion) return null
-
-  const issuer = `https://${environment.CF_ACCESS_TEAM_DOMAIN}.cloudflareaccess.com`
-  let keySet = accessKeySets.get(issuer)
-  if (!keySet) {
-    keySet = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`))
-    accessKeySets.set(issuer, keySet)
-  }
-
-  try {
-    const { payload } = await jwtVerify(assertion, keySet, {
-      issuer,
-      audience: environment.CF_ACCESS_AUD,
-    })
-    return typeof payload.sub === 'string'
-      ? payload.sub
-      : typeof payload.email === 'string'
-        ? payload.email
-        : null
-  } catch {
-    return null
-  }
-}
 
 function json(data: unknown, status = 200) {
   return Response.json(data, { status })
@@ -138,7 +101,7 @@ export async function handleWorkoutSyncRequest(
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
   if (!environment) return json({ error: 'Cloudflare bindings unavailable' }, 503)
 
-  const authenticatedSubject = await authenticateSyncRequest(request, environment)
+  const authenticatedSubject = await authenticateOwnerRequest(request, environment)
   if (!authenticatedSubject) return json({ error: 'Unauthorized' }, 401)
 
   if (Number(request.headers.get('Content-Length') ?? 0) > MAX_SYNC_PAYLOAD_BYTES) {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CalendarDays, CircleGauge, Cloud, Dumbbell, Ellipsis, Layers3, Library, Timer } from '@lucide/svelte'
+  import { Activity, CalendarDays, CircleGauge, Cloud, Dumbbell, Ellipsis, Layers3, Library, Timer } from '@lucide/svelte'
   import type { AppView, WorkoutSession } from '$lib/types'
   import { formatCountdown, formatElapsed } from '$lib/utils'
 
@@ -11,7 +11,7 @@
   export let now: number
   export let onResume: () => void
 
-  $: moreActive = view === 'more' || view === 'routines' || view === 'exercises' || view === 'exercise' || view === 'settings'
+  $: moreActive = view === 'more' || view === 'report' || view === 'routines' || view === 'exercises' || view === 'exercise' || view === 'settings'
 
   $: activeRests = activeWorkout?.exercises
     .filter((exercise) => exercise.restUntil && new Date(exercise.restUntil).getTime() > now)
@@ -29,6 +29,7 @@
     </button>
     <nav class="mt-10 space-y-2" aria-label="Primary navigation">
       <button class:active-nav={view === 'today'} class="side-nav" on:click={() => onNavigate('today')} aria-current={view === 'today' ? 'page' : undefined}><Dumbbell class="size-4" />Today</button>
+      <button class:active-nav={view === 'report'} class="side-nav" on:click={() => onNavigate('report')} aria-current={view === 'report' ? 'page' : undefined}><Activity class="size-4" />Progress report</button>
       <button class:active-nav={view === 'history' || view === 'workout-history'} class="side-nav" on:click={() => onNavigate('history')} aria-current={view === 'history' || view === 'workout-history' ? 'page' : undefined}><CalendarDays class="size-4" />History</button>
       <button class:active-nav={view === 'routines'} class="side-nav" on:click={() => onNavigate('routines')} aria-current={view === 'routines' ? 'page' : undefined}><Layers3 class="size-4" />Routines</button>
       <button class:active-nav={view === 'exercises' || view === 'exercise'} class="side-nav" on:click={() => onNavigate('exercises')} aria-current={view === 'exercises' || view === 'exercise' ? 'page' : undefined}><Library class="size-4" />Exercises</button>

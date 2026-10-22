@@ -1,6 +1,6 @@
 import { McpServer, createMcpHandler, type AuthInfo } from '@modelcontextprotocol/server'
 import { z } from 'zod'
-import { buildExerciseProgress, buildRoutineReview, buildTrainingOverview, buildTrainingState } from '../training-analysis'
+import { buildExerciseProgress, buildRoutineReview, buildTrainingOverview, buildTrainingState } from '../../training-analysis'
 import { loadTrainingDataset } from '../training-read-model'
 import { authenticateMcpRequest, validateMcpRequestOrigin, type McpAuthEnvironment } from './auth'
 

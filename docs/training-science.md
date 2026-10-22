@@ -338,6 +338,33 @@ A LifeOS deload prompt is therefore an **optional, editable heuristic**, not an 
 
 The overtraining consensus further emphasizes that distinguishing non-functional overreaching from overtraining syndrome is difficult and depends on clinical outcome and exclusion diagnosis ([Meeusen et al., 2013](https://pubmed.ncbi.nlm.nih.gov/23247672/)). The app must not attempt that distinction.
 
+## Progress report aggregation
+
+The progress report is a deterministic view over the same training calculations used by the dashboard and MCP. AI does not calculate its metrics or assign its verdict. The browser builds the report from current device-local data, while MCP builds analytics from synchronized D1 data; cloud synchronization freshness is shown separately from local report freshness.
+
+An exercise receives a report status only from its same-ID e1RM profile:
+
+| Status | Implemented rule |
+| --- | --- |
+| Progressing | Recent three-exposure median is at least `3%` above the preceding three |
+| Stable | The comparison is greater than `−3%` and less than `3%` |
+| Declining | Recent median is at least `3%` below the preceding median |
+| Insufficient data | Fewer than six valid comparable e1RM exposures |
+
+The overall verdict summarizes all observed strength exercises, not only the representative rows displayed:
+
+- **Needs attention:** at least two exercises are declining and declining exercises outnumber progressing exercises.
+- **Progressing:** at least one exercise is progressing, none are declining, and progressing exercises are at least as numerous as stable exercises.
+- **Mixed:** at least one progressing or declining signal exists but neither rule above applies.
+- **Holding steady:** every comparable exercise is stable.
+- **Building evidence:** no exercise has a six-exposure comparison.
+
+Overall confidence is high only with at least four comparable exercises when at least 60% of those profiles have high confidence. It is moderate with at least two comparable exercises and low otherwise. This confidence still describes data coverage, not certainty about adaptation or protocol comparability.
+
+The displayed representative exercises are ranked deterministically by active-cycle membership, active-routine membership, comparison availability, confidence, logged exposure count, and recency. The report can therefore emphasize currently programmed movements without letting a language model choose or omit evidence.
+
+The optional AI narrative receives the typed report plus bounded citation records. Every finding must cite a supplied record, and the narrative is cached only for the exact report fingerprint. A changed completed workout, routine, cycle, profile, or report period produces a different fingerprint. In-progress workouts are excluded from progression evidence and do not invalidate the report narrative until completion. If the latest check-in records pain or illness, LifeOS replaces model-proposed actions with a deterministic user-review message and does not provide training clearance.
+
 ## Confidence labels for implementation
 
 Confidence qualifies sample count and required-field coverage. It never measures certainty about recovery, adaptation, fatigue, injury, or comparability that the app has not verified.

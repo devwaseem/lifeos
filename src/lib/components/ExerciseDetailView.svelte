@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ArrowLeft, Trophy } from '@lucide/svelte'
+  import type { AiSettings } from '$lib/ai-coach'
   import { formatSetDistance, formatSetDuration, getExerciseTrackingMode } from '$lib/exercise-tracking'
   import {
     buildExerciseSeries,
@@ -12,10 +13,11 @@
   } from '$lib/exercise-insights'
   import { buildExerciseProgressionResults } from '$lib/progression'
   import { getExerciseStrengthProfile, getFatigueSignal } from '$lib/training-science'
-  import type { ExerciseVideo, WorkoutSession } from '$lib/types'
+  import type { ExerciseDefinition, ExerciseVideo, RoutineTemplate, TrainingProfile, WorkoutSession } from '$lib/types'
   import { formatShortDate, formatVolume } from '$lib/utils'
   import { getWorkingSetNumber } from '$lib/workout-sets'
   import DottedAreaChart from './DottedAreaChart.svelte'
+  import ContextualAiInsight from './ContextualAiInsight.svelte'
   import ExerciseVideos from './ExerciseVideos.svelte'
   import ExerciseProgressionSignal from './ExerciseProgressionSignal.svelte'
   import ReadOnlyWorkoutSetHeader from './ReadOnlyWorkoutSetHeader.svelte'
@@ -28,9 +30,15 @@
   export let videos: ExerciseVideo[]
   export let onSaveVideo: (video: ExerciseVideo) => void
   export let onDeleteVideo: (videoId: string) => void
+  export let routines: RoutineTemplate[]
+  export let exercises: ExerciseDefinition[]
+  export let trainingProfile: TrainingProfile | null
+  export let aiSettings: AiSettings
+  export let online: boolean
 
   const historyPageSize = 8
-  let tab: 'summary' | 'history' | 'videos' = 'summary'
+  let tab: 'summary' | 'history' | 'ai' | 'videos' = 'summary'
+  let aiMode: 'progress-analysis' | 'exercise-substitutions' = 'progress-analysis'
   let metric: ExerciseMetric = 'heaviest'
   let range: ExerciseRange = '3m'
   let visibleHistoryCount = historyPageSize
@@ -68,9 +76,10 @@
     <div class="min-w-0"><p class="font-dot text-xs text-accent">EXERCISE</p><h1 class="mt-1 truncate text-2xl font-medium">{exerciseName}</h1><p class="mt-1 text-sm text-muted">{history.length} recorded {history.length === 1 ? 'session' : 'sessions'}</p></div>
   </header>
 
-  <div class="mt-7 grid grid-cols-3 rounded-full bg-paper p-1" role="tablist" aria-label="Exercise details">
+  <div class="mt-7 grid grid-cols-4 rounded-full bg-paper p-1" role="tablist" aria-label="Exercise details">
     <button class:active-tab={tab === 'summary'} class="detail-tab" role="tab" aria-selected={tab === 'summary'} on:click={() => { tab = 'summary' }}>Summary</button>
     <button class:active-tab={tab === 'history'} class="detail-tab" role="tab" aria-selected={tab === 'history'} on:click={() => { tab = 'history' }}>History</button>
+    <button class:active-tab={tab === 'ai'} class="detail-tab" role="tab" aria-selected={tab === 'ai'} on:click={() => { tab = 'ai' }}>AI</button>
     <button class:active-tab={tab === 'videos'} class="detail-tab" role="tab" aria-selected={tab === 'videos'} on:click={() => { tab = 'videos' }}>Videos</button>
   </div>
 
@@ -210,8 +219,39 @@
         <div class="rounded-2xl bg-paper p-6 text-sm text-muted">No completed history for this exercise yet.</div>
       {/if}
     </section>
-  {:else}
+  {:else if tab === 'videos'}
     <ExerciseVideos {exerciseId} {exerciseName} {videos} onSave={onSaveVideo} onDelete={onDeleteVideo} />
+  {:else}
+    <section class="mt-5" aria-labelledby="exercise-ai-heading">
+      <div>
+        <p class="font-dot text-xs text-accent">EXERCISE ANALYSIS</p>
+        <h2 id="exercise-ai-heading" class="mt-1 text-xl font-medium">Ask the record about {exerciseName}</h2>
+        <p class="mt-2 max-w-2xl text-sm leading-6 text-muted">Explain the logged trend or compare substitutions without leaving this exercise.</p>
+      </div>
+      <div class="mt-5 grid grid-cols-2 rounded-full bg-paper p-1" role="tablist" aria-label="Exercise AI analysis">
+        <button class:active-tab={aiMode === 'progress-analysis'} class="detail-tab" role="tab" aria-selected={aiMode === 'progress-analysis'} on:click={() => { aiMode = 'progress-analysis' }}>Progress</button>
+        <button class:active-tab={aiMode === 'exercise-substitutions'} class="detail-tab" role="tab" aria-selected={aiMode === 'exercise-substitutions'} on:click={() => { aiMode = 'exercise-substitutions' }}>Swap</button>
+      </div>
+      <div class="mt-3">
+        {#key aiMode}
+          <ContextualAiInsight
+            kind={aiMode}
+            subjectId={exerciseId}
+            title={aiMode === 'progress-analysis' ? `Explain ${exerciseName} progress` : `Find alternatives to ${exerciseName}`}
+            description={aiMode === 'progress-analysis'
+              ? 'Use comparable exposures, estimated strength, and effort coverage to explain this exercise’s trend.'
+              : 'Rank alternatives using target muscle, available equipment, exclusions, and logged exposure.'}
+            actionLabel={aiMode === 'progress-analysis' ? 'Analyze progress' : 'Rank alternatives'}
+            {workouts}
+            {routines}
+            {exercises}
+            {trainingProfile}
+            {aiSettings}
+            {online}
+          />
+        {/key}
+      </div>
+    </section>
   {/if}
 </div>
 

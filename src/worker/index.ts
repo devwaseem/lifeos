@@ -1,9 +1,9 @@
 import { Hono, type Context } from 'hono'
+import { handleAiCoachRequest, handleAiInsightsRequest, type AiCoachEnvironment } from '../lib/server/ai-coach'
 import { handleWorkoutSyncRequest, type WorkoutSyncEnvironment } from '../lib/server/workout-sync'
 import { handleMcpRequest, type McpEnvironment } from '../lib/server/mcp/server'
-
 type WorkerEnvironment = {
-  Bindings: WorkoutSyncEnvironment & McpEnvironment
+  Bindings: WorkoutSyncEnvironment & McpEnvironment & AiCoachEnvironment
 }
 
 const app = new Hono<WorkerEnvironment>()
@@ -14,6 +14,8 @@ app.get('/api/health', async (context) => {
 })
 
 app.post('/api/sync', (context) => handleWorkoutSyncRequest(context.req.raw, context.env))
+app.all('/api/coach', (context) => handleAiCoachRequest(context.req.raw, context.env))
+app.post('/api/insights', (context) => handleAiInsightsRequest(context.req.raw, context.env))
 app.all('/mcp', (context: Context<WorkerEnvironment>) => handleMcpRequest(context.req.raw, context.env))
 
 app.notFound((context) => context.json({ error: 'Not found' }, 404))
