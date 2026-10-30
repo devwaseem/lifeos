@@ -6,7 +6,7 @@ LifeOS Training is an offline-first workout journal for planning routines, recor
 
 - Active workout tracking with persistent timers, rest intervals, set notes, and a described RPE 6–10 scale
 - Reusable routines with ordered exercises, optional warmup sets, working-set defaults, coaching notes, progression rules, and centralized per-equipment load racks for non-linear dumbbell, cable, and machine stacks
-- FIFO training cycles that advance only on completed workouts and infer rest after a configurable consecutive-training-day count
+- Flexible training cycles with distinct routines that move to the slot after the routine you complete, allow skipped slots, and infer rest after a configurable consecutive-training-day count
 - Exercise history, personal records, progress charts, and calendar views
 - Muscle-readiness and workload estimates derived from recorded training data
 - Installable PWA behavior with an offline application shell and local workout access
@@ -18,6 +18,16 @@ LifeOS Training is an offline-first workout journal for planning routines, recor
 - A live offline-first Today report plus a dedicated detail view with a deterministic verdict, representative exercise trends, workload and readiness context, routine distribution, evidence quality, and an optional evidence-cited AI narrative
 
 Training metrics are descriptive heuristics rather than medical or injury-risk assessments. Their formulas, assumptions, and evidence boundaries are documented in [`docs/training-science.md`](docs/training-science.md).
+
+### Routine identity, templates, and the queue
+
+A routine identifies a session and supplies its starting template; it is not an exercise checklist. Substitute, add, remove, or reorder exercises and change set counts or rest times freely. **Finish [routine]** saves the actual session under that routine without changing the template. Secondary **Template options** let you explicitly update the saved template or create a new one. Creating a template from an already-associated session does not reclassify that session.
+
+The next session starts from the saved template, with exercise-history-based load and repetition suggestions. Template edits are never inferred from session changes.
+
+Each routine can appear only once in a training cycle. Starting or cancelling a workout leaves the queue unchanged. Completing a routine in the cycle makes the position after that routine next, wrapping at the end; skipped slots are not recorded as completed workouts. For example, with Pull B queued, choosing and completing Push A makes Pull A next. This works whether you start from Today or the routine picker.
+
+Completing a saved routine outside the cycle retains its routine association without moving the queue. A workout with no routine association is a one-off and also leaves the queue unchanged.
 
 ## Architecture
 
@@ -55,7 +65,7 @@ The Today coach and contextual AI actions send bounded, locally derived context 
 
 ### Prerequisites
 
-- Node.js and npm
+- Node.js 22.13+ (or a supported newer release) and npm
 - Wrangler, installed through the project dependencies
 
 ### Start the application
@@ -74,6 +84,21 @@ The development command starts:
 
 Before startup, pending local migrations are applied and the development database is seeded idempotently.
 
+### Copy production data into local testing
+
+```bash
+npx wrangler login # only if this machine is not already authenticated
+npm run db:sync:local
+```
+
+This is a one-way copy from the production D1 database configured in `wrangler.toml` into the local database configured in `wrangler.worker.toml`, persisted under `.wrangler/state`. It never writes to production. The command validates the production export, backs up local D1, replaces local tables in one atomic batch, verifies row counts and foreign keys, and applies any newer local migrations without seeding demo data.
+
+**Local D1 data is replaced, not merged.** Avoid editing the local app while the command runs. Once it succeeds, start `npm run dev` if needed and reload `http://localhost:5173`. Development startup already pulls a full snapshot from local D1 into IndexedDB without uploading stale browser records first.
+
+Timestamped `production.sql`, `local-before-sync.sql`, and `import.sql` files are retained in `.wrangler/backups/production-sync-*`. These contain private data; the command creates owner-only files/directories, and `.wrangler` is gitignored. A failed local import rolls back that batch; completed exports remain available.
+
+Only data synchronized to production D1 can be copied. Browser-only AI credentials, generated AI reports, exercise videos, and unsynchronized edits are not included.
+
 ### Available commands
 
 | Command | Purpose |
@@ -82,6 +107,7 @@ Before startup, pending local migrations are applied and the development databas
 | `npm run dev:web` | Start only the SvelteKit development server |
 | `npm run dev:api` | Start only the local Worker |
 | `npm run db:setup:local` | Apply local migrations and seed local D1 |
+| `npm run db:sync:local` | Back up local D1 and replace it with a validated production snapshot |
 | `npm run db:migrate:remote` | Apply migrations to the configured remote D1 database |
 | `npm test` | Run the Vitest suite |
 | `npm run check` | Run Svelte and TypeScript diagnostics |

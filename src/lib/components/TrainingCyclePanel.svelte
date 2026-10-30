@@ -16,6 +16,10 @@
   let draft: TrainingCycle | null = null
   let routineToAdd = ''
 
+  $: availableRoutines = draft
+    ? routines.filter((routine) => !draft?.slots.some((slot) => slot.routineId === routine.id))
+    : routines
+
   $: activeCycle = trainingCycle && !trainingCycle.deletedAt && trainingCycle.slots.length > 0 ? trainingCycle : null
   $: currentSlot = getCurrentCycleSlot(activeCycle)
   $: currentLabel = currentSlot ? slotLabel(currentSlot) : 'Not configured'
@@ -24,16 +28,20 @@
     return routines.find((routine) => routine.id === slot.routineId)?.name ?? 'Missing routine'
   }
 
+  function nextAvailableRoutineId(slots: TrainingCycleSlot[]) {
+    return routines.find((routine) => !slots.some((slot) => slot.routineId === routine.id))?.id ?? ''
+  }
+
   function openCreate() {
     draft = createTrainingCycle()
-    routineToAdd = routines[0]?.id ?? ''
+    routineToAdd = nextAvailableRoutineId(draft.slots)
     editor.showModal()
   }
 
   function openEdit() {
     if (!activeCycle) return
     draft = structuredClone(activeCycle)
-    routineToAdd = routines[0]?.id ?? ''
+    routineToAdd = nextAvailableRoutineId(draft.slots)
     editor.showModal()
   }
 
@@ -44,7 +52,11 @@
 
   function addRoutine() {
     if (!draft || !routineToAdd) return
-    draft = { ...draft, slots: [...draft.slots, addRoutineCycleSlot(routineToAdd)] }
+    const slot = addRoutineCycleSlot(routineToAdd, draft.slots)
+    if (!slot) return
+    const slots = [...draft.slots, slot]
+    draft = { ...draft, slots }
+    routineToAdd = nextAvailableRoutineId(slots)
   }
 
 
@@ -75,16 +87,22 @@
 
   function saveDraft() {
     if (!draft || !draft.name.trim() || draft.slots.length === 0) return
-    const timestamp = new Date().toISOString()
     const validRoutineIds = new Set(routines.map((routine) => routine.id))
     const slots = draft.slots.filter((slot) => validRoutineIds.has(slot.routineId))
-    if (slots.length === 0) return
+    const routineIds = new Set(slots.map((slot) => slot.routineId))
+    if (slots.length === 0 || routineIds.size !== slots.length) return
+    const currentSlotId = draft.slots[draft.currentIndex]?.id
+    const retainedCurrentIndex = slots.findIndex((slot) => slot.id === currentSlotId)
+    const currentIndex = retainedCurrentIndex >= 0
+      ? retainedCurrentIndex
+      : Math.min(draft.currentIndex, slots.length - 1)
+    const timestamp = new Date().toISOString()
     onSave({
       ...draft,
       name: draft.name.trim(),
       trainingDaysBeforeRest: Math.min(7, Math.max(1, Math.round(draft.trainingDaysBeforeRest))),
       slots,
-      currentIndex: Math.min(draft.currentIndex, slots.length - 1),
+      currentIndex,
       updatedAt: timestamp,
       deletedAt: null,
     })
@@ -118,7 +136,7 @@
     </div>
   {:else}
     <div class="grid gap-6 p-5 sm:p-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-      <div><div class="flex items-center gap-2 text-accent"><Repeat2 class="size-4" /><p class="font-dot text-xs">TRAINING CYCLE</p></div><h2 id="training-cycle-heading" class="mt-3 text-2xl font-medium">Decide what comes next</h2><p class="mt-2 max-w-xl text-sm leading-6 text-panel-deep">Arrange workout routines in a FIFO rotation. Rest is inferred from your consecutive training days and never consumes the next routine.</p></div>
+      <div><div class="flex items-center gap-2 text-accent"><Repeat2 class="size-4" /><p class="font-dot text-xs">TRAINING CYCLE</p></div><h2 id="training-cycle-heading" class="mt-3 text-2xl font-medium">Decide what comes next</h2><p class="mt-2 max-w-xl text-sm leading-6 text-panel-deep">Arrange your workout routines in a rotation. Completing any routine in the cycle moves the queue to the routine after it, so you can train out of order.</p></div>
       <button class="min-h-12 rounded-xl bg-accent px-5 text-sm font-medium text-accent-ink" on:click={openCreate}>Build cycle</button>
     </div>
   {/if}
@@ -136,7 +154,7 @@
 
       <label class="mt-5 block"><span class="text-xs font-medium uppercase text-muted">Training days before rest</span><input bind:value={draft.trainingDaysBeforeRest} class="mt-2 min-h-12 w-full rounded-xl border-0 bg-canvas px-4 text-base outline-none" type="number" min="1" max="7" inputmode="numeric" aria-describedby="cadence-description" /><span id="cadence-description" class="mt-2 block text-xs leading-5 text-muted">After this many consecutive training days, the next calendar day is shown as rest. Any earlier day off resets the count.</span></label>
 
-      <div class="mt-7 flex items-end justify-between gap-4"><div><h3 class="text-sm font-medium">Routine queue</h3><p class="mt-1 text-xs text-muted">The highlighted routine is next. Only completed workouts advance it.</p></div><span class="font-dot text-xl">{draft.slots.length}</span></div>
+      <div class="mt-7 flex items-end justify-between gap-4"><div><h3 class="text-sm font-medium">Routine queue</h3><p class="mt-1 text-xs text-muted">The highlighted routine is next. Completing any routine in this cycle moves to the one after it, so you can skip ahead.</p></div><span class="font-dot text-xl">{draft.slots.length}</span></div>
       {#if draft.slots.length > 0}
         <div class="mt-3 space-y-2">
           {#each draft.slots as slot, index (slot.id)}
@@ -152,8 +170,8 @@
       {/if}
 
       <div class="mt-5 grid grid-cols-[minmax(0,1fr)_auto] rounded-xl bg-canvas p-1">
-        <label class="min-w-0"><span class="sr-only">Routine to add</span><select bind:value={routineToAdd} class="min-h-11 w-full bg-transparent px-3 text-sm outline-none" aria-label="Routine to add"><option value="" disabled>Select routine</option>{#each routines as routine (routine.id)}<option value={routine.id}>{routine.name}</option>{/each}</select></label>
-        <button class="flex min-h-11 items-center gap-2 rounded-lg bg-ink px-4 text-sm font-medium text-paper disabled:opacity-40" disabled={!routineToAdd} on:click={addRoutine}><Plus class="size-4" /> Add</button>
+        <label class="min-w-0"><span class="sr-only">Routine to add</span><select bind:value={routineToAdd} class="min-h-11 w-full bg-transparent px-3 text-sm outline-none" aria-label="Routine to add" disabled={availableRoutines.length === 0}><option value="" disabled>Select routine</option>{#each availableRoutines as routine (routine.id)}<option value={routine.id}>{routine.name}</option>{/each}</select></label>
+        <button class="flex min-h-11 items-center gap-2 rounded-lg bg-ink px-4 text-sm font-medium text-paper disabled:opacity-40" disabled={!routineToAdd || availableRoutines.length === 0} on:click={addRoutine}><Plus class="size-4" /> Add</button>
       </div>
 
       <button class="mt-7 min-h-12 w-full rounded-xl bg-accent px-5 text-sm font-medium text-accent-ink disabled:bg-panel disabled:text-muted" disabled={!draft.name.trim() || draft.slots.length === 0} on:click={saveDraft}>Save training cycle</button>

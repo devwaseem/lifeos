@@ -21,6 +21,7 @@
     "db:setup:local": "npm run db:migrate:local && npm run db:seed:local",
     "db:migrate:local": "wrangler d1 migrations apply lifeos --local --config wrangler.worker.toml --persist-to .wrangler/state",
     "db:seed:local": "wrangler d1 execute lifeos --local --config wrangler.worker.toml --persist-to .wrangler/state --file scripts/seed-local-d1.sql --yes",
+    "db:sync:local": "node scripts/sync-production-to-local.mjs",
     "db:migrate:remote": "wrangler d1 migrations apply lifeos --remote",
     "pwa:assets": "pwa-assets-generator --preset minimal public/favicon.svg"
   },

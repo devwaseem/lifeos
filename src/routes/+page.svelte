@@ -24,7 +24,7 @@
   import { createOneOffWorkout, createWorkoutFromRoutine, routineFromWorkout } from '$lib/routines'
   import { deleteAppleHealthExport, deleteExerciseVideo, getAiSettings, getAppleHealthExports, getCustomExercises, getEquipmentSettings, getExerciseVideos, getRoutines, getSyncSettings, getTrainingCycle, getTrainingProfile, getWorkouts, replaceEquipmentSettings, replaceRoutines, replaceTrainingCycle, replaceTrainingProfile, replaceWorkouts, saveAiSettings, saveAppleHealthExport, saveCustomExercise, saveEquipmentSettings, saveExerciseVideo, saveRoutine, saveSyncSettings, saveTrainingCycle, saveTrainingProfile, saveWorkout } from '$lib/storage'
   import { mergeEquipmentSettings, mergeRoutines, mergeTrainingCycle, mergeTrainingProfile, mergeWorkouts, syncData } from '$lib/sync'
-  import { advanceTrainingCycleForWorkout, reconcileTrainingCycleAfterDeletedWorkouts, removeRoutineFromTrainingCycle, rewindTrainingCycleForDeletedWorkout } from '$lib/training-cycle'
+  import { advanceTrainingCycleForWorkout, getCycleSlotForRoutine, reconcileTrainingCycleAfterDeletedWorkouts, removeRoutineFromTrainingCycle, rewindTrainingCycleForDeletedWorkout } from '$lib/training-cycle'
   import { buildTrainingProgressReport } from '$lib/training-progress-report'
   import { getConsecutiveLoadDays } from '$lib/training-readiness'
   import { getWorkoutVolumeComparison, type WorkoutVolumeComparison } from '$lib/utils'
@@ -60,6 +60,7 @@
   let workoutCompleteDialog: WorkoutCompleteDialog
   let checkInDialog: WorkoutCheckInDialog
   let pendingWorkoutStart: { kind: 'routine'; routine: RoutineTemplate; cycleSlotId: string | null } | { kind: 'custom' } | null = null
+  let fatigueOverrideRoutine: RoutineTemplate | null = null
   let selectedRoutineId = ''
   const TODAY_ROUTINE_KEY = 'lifeos-today-routine-id'
   const notifiedRestTimers = new Set<string>()
@@ -506,7 +507,10 @@
       )
       const mergedWorkouts = mergeWorkouts(mergeLocalData ? nextWorkouts : [], response.workouts)
       const mergedRoutines = mergeRoutines(mergeLocalData ? nextRoutines : [], response.routines)
-      const mergedCycle = mergeTrainingCycle(mergeLocalData ? nextTrainingCycle : null, response.trainingCycle ?? null)
+      const mergedCycle = mergeTrainingCycle(
+        mergeLocalData && !response.replaceInvalidTrainingCycle ? nextTrainingCycle : null,
+        response.trainingCycle ?? null,
+      )
       const mergedTrainingCycle = mergedCycle
         ? reconcileTrainingCycleAfterDeletedWorkouts(mergedCycle, mergedWorkouts)
         : null
@@ -593,21 +597,20 @@
     startDialog.open()
   }
 
-  function startRoutine(routine: RoutineTemplate, cycleSlotId: string | null = null) {
+  function startRoutine(routine: RoutineTemplate) {
     if (activeWorkout) { navigate('workout'); return }
-    pendingWorkoutStart = { kind: 'routine', routine, cycleSlotId }
+    const cycleSlot = getCycleSlotForRoutine(trainingCycle, routine.id)
+    pendingWorkoutStart = { kind: 'routine', routine, cycleSlotId: cycleSlot?.id ?? null }
     checkInDialog.open()
   }
 
-  function startCycleRoutine(routine: RoutineTemplate, slotId: string) {
-    startRoutine(routine, slotId)
-  }
 
   function requestRoutineStart(routine: RoutineTemplate) {
     if (activeWorkout) { navigate('workout'); return }
     selectTodayRoutine(routine.id)
     if (getConsecutiveLoadDays(workouts) >= 3) {
-      navigate('today', -1)
+      fatigueOverrideRoutine = routine
+      fatigueDialog.open()
       return
     }
     startRoutine(routine)
@@ -615,11 +618,19 @@
   function startCustomWorkout(forceOverride = false) {
     if (activeWorkout) { navigate('workout'); return }
     if (!forceOverride && getConsecutiveLoadDays(workouts) >= 3) {
+      fatigueOverrideRoutine = null
       fatigueDialog.open()
       return
     }
     pendingWorkoutStart = { kind: 'custom' }
     checkInDialog.open()
+  }
+
+  function confirmFatigueOverride() {
+    const routine = fatigueOverrideRoutine
+    fatigueOverrideRoutine = null
+    if (routine) startRoutine(routine)
+    else startCustomWorkout(true)
   }
 
   function startCheckedInWorkout(checkIn: WorkoutCheckIn) {
@@ -772,16 +783,17 @@
       const existing = routines.find((routine) => routine.id === activeWorkout.routineId && !routine.deletedAt)
       if (existing) {
         routineToSave = routineFromWorkout(activeWorkout, existing.name, existing, timestamp)
-        routineId = existing.id
-      } else {
-        routineId = null
       }
     } else if (decision.disposition === 'new-routine') {
       routineToSave = routineFromWorkout(activeWorkout, decision.routineName, undefined, timestamp)
-      routineId = routineToSave.id
+      if (!routineId) routineId = routineToSave.id
     } else if (decision.disposition === 'one-off') {
       routineId = null
     }
+
+    const cycleSlotId = routineId
+      ? getCycleSlotForRoutine(trainingCycle, routineId)?.id ?? null
+      : null
 
     if (routineToSave) {
       nextRoutines = [routineToSave, ...routines.filter((routine) => routine.id !== routineToSave?.id)]
@@ -792,6 +804,7 @@
     const completed: WorkoutSession = {
       ...activeWorkout,
       routineId,
+      cycleSlotId,
       status: 'completed',
       completedAt: timestamp,
       updatedAt: timestamp,
@@ -841,7 +854,7 @@
       {#key view}
         <div class="page-panel" in:pageIn out:pageOut>
           {#if view === 'today'}
-            <TodayView {workouts} routines={visibleRoutines} {activeWorkout} {trainingCycle} {selectedRoutineId} {now} {progressReport} {aiSettings} {online} onSelectRoutine={selectTodayRoutine} onStartRoutine={startRoutine} onStartCycleRoutine={startCycleRoutine} onStart={requestWorkoutStart} onResume={() => navigate('workout')} onManageRoutines={() => navigate('routines')} onViewReport={() => navigate('report')} onOpenExercise={openExercise} />
+            <TodayView {workouts} routines={visibleRoutines} {activeWorkout} {trainingCycle} {selectedRoutineId} {now} {progressReport} {aiSettings} {online} onSelectRoutine={selectTodayRoutine} onStartRoutine={startRoutine} onStart={requestWorkoutStart} onResume={() => navigate('workout')} onManageRoutines={() => navigate('routines')} onViewReport={() => navigate('report')} onOpenExercise={openExercise} />
           {:else if view === 'history'}
             <HistoryView {workouts} onStart={requestWorkoutStart} onOpenWorkout={openWorkout} />
           {:else if view === 'workout-history' && selectedWorkout}
@@ -883,7 +896,7 @@
 
 <WorkoutStartDialog bind:this={startDialog} routines={visibleRoutines} onSelectRoutine={requestRoutineStart} onCustom={startCustomWorkout} onManageRoutines={() => navigate('routines')} />
 <WorkoutCheckInDialog bind:this={checkInDialog} onSubmit={startCheckedInWorkout} onCancel={() => { pendingWorkoutStart = null }} />
-<ConfirmDialog bind:this={fatigueDialog} eyebrow="Heuristic governor" title="Systemic fatigue warning" description="Three or more consecutive training days are logged. Continue only if this additional load is intentional and recovery is adequate." confirmLabel="Force override" onConfirm={() => startCustomWorkout(true)} />
+<ConfirmDialog bind:this={fatigueDialog} eyebrow="Heuristic governor" title="Systemic fatigue warning" description="Three or more consecutive training days are logged. Continue only if this additional load is intentional and recovery is adequate." confirmLabel="Force override" onConfirm={confirmFatigueOverride} />
 <WorkoutCompleteDialog bind:this={workoutCompleteDialog} workout={completedWorkoutForHealth} volumeComparison={completedWorkoutVolumeComparison} canExport={canExportToAppleHealth} error={appleHealthActionError} onExport={exportWorkoutToAppleHealth} />
 
 <style>

@@ -5,12 +5,20 @@ LifeOS records individual workout sessions and uses reusable routines and a comp
 ## Language
 
 **Routine**:
-A reusable workout structure containing an ordered set of exercises.
+A reusable identity for related workout sessions, with a saved template of exercises and defaults. A session can substitute, add, or omit exercises without losing its routine association or changing that template.
 _Avoid_: Day, schedule
 
 **Training cycle**:
-An ordered, repeating FIFO queue of routines. Completing the queued routine advances the queue; a non-training day does not.
+An ordered, repeating queue of distinct routines. Completing any routine in the cycle makes the following routine next; intervening routines are skipped, not completed, while one-off workouts and routines outside the cycle leave its position unchanged.
 _Avoid_: Calendar plan, weekly schedule
+
+**Routine template**:
+The saved exercise structure and defaults used to start a routine-associated workout. Session changes become template changes only through an explicit update.
+_Avoid_: Compliance checklist
+
+**One-off workout**:
+A workout session with no routine association. A session associated with a routine outside the active cycle is not a one-off.
+_Avoid_: Off-cycle routine
 
 **Training day**:
 A local calendar day containing at least one completed workout.

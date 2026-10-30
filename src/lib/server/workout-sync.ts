@@ -79,6 +79,7 @@ function isTrainingCycle(value: unknown): value is TrainingCycle {
       && typeof slot.id === 'string'
       && typeof slot.routineId === 'string'
       && slot.routineId.length > 0)
+    && new Set(cycle.slots.map((slot) => slot.routineId)).size === cycle.slots.length
 }
 
 function isTrainingProfile(value: unknown): value is TrainingProfile {

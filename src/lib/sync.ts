@@ -14,6 +14,16 @@ interface SyncResponse {
   syncedAt: string
 }
 
+function hasDuplicateRoutineSlots(cycle: TrainingCycle | null) {
+  if (!cycle) return false
+  const routineIds = new Set<string>()
+  return cycle.slots.some((slot) => {
+    if (routineIds.has(slot.routineId)) return true
+    routineIds.add(slot.routineId)
+    return false
+  })
+}
+
 export async function syncData(
   settings: SyncSettings,
   workouts: WorkoutSession[],
@@ -24,6 +34,7 @@ export async function syncData(
 ) {
   if (!navigator.onLine) throw new Error('You are offline. Your workout is safe on this device.')
 
+  const replaceInvalidTrainingCycle = hasDuplicateRoutineSlots(trainingCycle)
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (import.meta.env.DEV) headers.set('Authorization', 'Bearer lifeos-local-dev')
   const response = await fetch('/api/sync', {
@@ -33,10 +44,10 @@ export async function syncData(
       deviceId: settings.deviceId,
       workouts,
       routines,
-      trainingCycle,
+      trainingCycle: replaceInvalidTrainingCycle ? null : trainingCycle,
       profile,
       equipmentSettings,
-      cursor: settings.syncCursor,
+      cursor: replaceInvalidTrainingCycle ? null : settings.syncCursor,
     }),
   })
 
@@ -50,7 +61,8 @@ export async function syncData(
     throw new Error('Your Cloudflare Access session has expired. Reload to sign in again.')
   }
 
-  return response.json() as Promise<SyncResponse>
+  const payload = await response.json() as SyncResponse
+  return { ...payload, replaceInvalidTrainingCycle }
 }
 
 export function mergeWorkouts(local: WorkoutSession[], remote: WorkoutSession[]) {

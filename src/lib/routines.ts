@@ -135,22 +135,6 @@ export function createOneOffWorkout(title: string, checkIn: WorkoutCheckIn, time
   }
 }
 
-export function routineMatchesWorkout(routine: RoutineTemplate, workout: WorkoutSession) {
-  if (routine.exercises.length !== workout.exercises.length) return false
-  return routine.exercises.every((template, index) => {
-    const exercise = workout.exercises[index]
-    return exercise
-      && template.exerciseId === exercise.exerciseId
-      && template.notes === exercise.notes
-      && template.restSeconds === exercise.restSeconds
-      && JSON.stringify(resolveSecondaryMuscles(template)) === JSON.stringify(resolveSecondaryMuscles(exercise))
-      && template.progression.minReps === exercise.progression.minReps
-      && template.progression.maxReps === exercise.progression.maxReps
-      && template.progression.weightIncrement === exercise.progression.weightIncrement
-      && normalizeSetCount(template.setCount) === countWorkingSets(exercise.sets)
-      && template.hasWarmupSet === exercise.sets.some((set) => set.warmup)
-  })
-}
 
 export function routineFromWorkout(
   workout: WorkoutSession,

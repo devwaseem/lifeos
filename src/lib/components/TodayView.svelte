@@ -17,7 +17,6 @@
   export let now: number
   export let onSelectRoutine: (routineId: string) => void
   export let onStartRoutine: (routine: RoutineTemplate) => void
-  export let onStartCycleRoutine: (routine: RoutineTemplate, slotId: string) => void
   export let onStart: () => void
   export let onResume: () => void
   export let onManageRoutines: () => void
@@ -144,22 +143,17 @@
       forceOverrideOpen = true
       return
     }
-    if (cycleSlot && cycleRoutine) {
-      onStartCycleRoutine(cycleRoutine, cycleSlot.id)
-      return
-    }
     onStartRoutine(plannedRoutine)
   }
 
   function trainOnRestDay() {
-    if (cycleSlot && cycleRoutine) onStartCycleRoutine(cycleRoutine, cycleSlot.id)
+    if (cycleSlot && cycleRoutine) onStartRoutine(cycleRoutine)
   }
 
   function forceOverride() {
     if (!plannedRoutine) return
     forceOverrideOpen = false
-    if (cycleSlot && cycleRoutine) onStartCycleRoutine(cycleRoutine, cycleSlot.id)
-    else onStartRoutine(plannedRoutine)
+    onStartRoutine(plannedRoutine)
   }
 
 </script>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createWorkoutFromRoutine } from './routines'
+import { createWorkoutFromRoutine, routineFromWorkout } from './routines'
 import type { EquipmentSettings, RoutineTemplate, WorkoutCheckIn, WorkoutSession, WorkoutSet } from './types'
 
 function completedSet(id: string, weight: number, reps: number, warmup = false): WorkoutSet {
@@ -120,5 +120,26 @@ describe('routine workout set planning', () => {
 
     expect(routine.exercises[0].progression.weightOptions).toEqual([])
     expect(workout.exercises[0].progression.weightOptions).toEqual([20, 40, 47.5, 55])
+  })
+
+  it('saves a modified session as a separate template that seeds its next workout', () => {
+    const started = createWorkoutFromRoutine(routine, checkIn, '2026-10-20T08:00:00.000Z', null, [previousWorkout])
+    const modified = {
+      ...started,
+      exercises: started.exercises.map((exercise) => ({
+        ...exercise,
+        notes: 'Pause at the chest',
+        restSeconds: 90,
+        sets: [...exercise.sets, completedSet('working-4', 80, 6)],
+      })),
+    }
+
+    const saved = routineFromWorkout(modified, 'Paused Push', undefined, '2026-10-20T09:00:00.000Z')
+    const nextWorkout = createWorkoutFromRoutine(saved, checkIn, '2026-10-21T08:00:00.000Z')
+
+    expect(routine).toMatchObject({ name: 'Push', exercises: [{ notes: '', restSeconds: 120, setCount: 3 }] })
+    expect(saved).toMatchObject({ name: 'Paused Push', exercises: [{ notes: 'Pause at the chest', restSeconds: 90, setCount: 4 }] })
+    expect(nextWorkout.exercises[0]).toMatchObject({ notes: 'Pause at the chest', restSeconds: 90 })
+    expect(nextWorkout.exercises[0].sets).toHaveLength(5)
   })
 })

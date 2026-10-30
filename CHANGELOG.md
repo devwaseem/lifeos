@@ -2,6 +2,10 @@
 
 ## 0.1.0
 
+- Kept modified workouts associated with their original routine, made finishing the default action, and moved explicit template updates/new-template creation into secondary options.
+- Changed cycle advancement to follow the routine actually completed from any start path, including skipped slots and wraparound, while outside-cycle routines and one-off sessions leave the queue unchanged.
+- Prevented duplicate routines in cycle editing and synchronization; split the second production Leg A slot into an independent Leg B template without rewriting workout history.
+- Added `npm run db:sync:local` for one-way production-to-local D1 copies, with private timestamped backups, atomic local replacement, snapshot integrity and row-count checks, and local migration application.
 - Added a mobile-first workout tracker with active sessions, exercise search, set logging, notes, completion, and history.
 - Added offline persistence with IndexedDB and an installable PWA service worker.
 - Added authenticated Cloudflare D1 synchronization through a SvelteKit API route.

@@ -275,9 +275,11 @@ Personal-record status and subjective soreness are not inputs to this model. A p
 
 ## Scheduling heuristics
 
-### FIFO training cycle and inferred rest
+### Flexible training cycle and inferred rest
 
-A training cycle is an ordered, repeating FIFO queue containing routines only. Completing a workout linked to the routine at the head of the queue advances to the next routine. Cancelling a workout, completing a one-off workout, or taking a day off does not advance the queue.
+A training cycle is an ordered, repeating queue of distinct routines. Completing a workout associated with any routine in the cycle moves the queue to the position after that routine, wrapping at the end. Selecting a later routine skips intervening slots without recording them as completed sessions. Starting or cancelling a workout, completing a one-off or an outside-cycle routine, and taking a day off leave the queue unchanged.
+
+Routine identity does not require matching the template's exercises, order, set counts, or rest times. Session variations remain logged under the original routine, and the actual performed exercises drive training metrics. Templates change only through an explicit update; the next session starts from that saved template rather than copying the last session's substitutions.
 
 The cycle stores an editable `training_days_before_rest` value from 1 through 7. LifeOS counts distinct local calendar dates with completed workouts immediately before today. An inferred rest day is due only when:
 

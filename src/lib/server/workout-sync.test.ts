@@ -29,13 +29,13 @@ async function accessToken(overrides: {
     .sign(overrides.signingKey ?? privateKey)
 }
 
-function request(assertion?: string) {
+function request(assertion?: string, body: unknown = {}) {
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (assertion) headers.set('Cf-Access-Jwt-Assertion', assertion)
   return new Request('https://app.example.com/api/sync', {
     method: 'POST',
     headers,
-    body: '{}',
+    body: JSON.stringify(body),
   })
 }
 
@@ -63,6 +63,30 @@ describe('POST /api/sync authentication', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toEqual({ error: 'Invalid sync payload' })
+  })
+
+  it('rejects a cycle with the same routine more than once', async () => {
+    const response = await handleWorkoutSyncRequest(request(await accessToken(), {
+      deviceId: 'device-1',
+      workouts: [],
+      routines: [],
+      trainingCycle: {
+        id: 'primary-training-cycle',
+        name: 'PPL',
+        createdAt: '2026-10-01T08:00:00.000Z',
+        updatedAt: '2026-10-01T08:00:00.000Z',
+        deletedAt: null,
+        currentIndex: 0,
+        trainingDaysBeforeRest: 3,
+        slots: [
+          { id: 'slot-1', routineId: 'push-a' },
+          { id: 'slot-2', routineId: 'push-a' },
+        ],
+      },
+    }), environment())
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid training cycle record' })
   })
 
   it('rejects a request without a Cloudflare Access assertion', async () => {

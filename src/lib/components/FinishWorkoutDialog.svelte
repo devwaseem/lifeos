@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { Activity, BookmarkPlus, Medal, RefreshCw, X } from '@lucide/svelte'
+  import { Activity, BookmarkPlus, Medal, X } from '@lucide/svelte'
   import type { ExerciseProgressionResult } from '$lib/progression'
   import type { WorkoutFinishDecision, WorkoutFinishDisposition } from '$lib/types'
   import type { WorkoutStrengthHighlight } from '$lib/training-science'
   import RpeCurve from './RpeCurve.svelte'
   import ExerciseProgressionSignal from './ExerciseProgressionSignal.svelte'
 
-  export let mode: 'routine' | 'changed' | 'one-off'
+  export let mode: 'routine' | 'one-off'
   export let routineName = ''
+  export let canUpdateTemplate = false
   export let suggestedRoutineName = ''
   export let description: string
   export let initialNotes = ''
@@ -20,11 +21,13 @@
   let notes = ''
   let newRoutineName = ''
   let sessionRpe: number | null = null
+  let templateOptionsOpen = false
 
   export function open() {
     notes = initialNotes
     newRoutineName = suggestedRoutineName
     sessionRpe = null
+    templateOptionsOpen = false
     dialog.showModal()
   }
 
@@ -76,14 +79,8 @@
       </section>
     {/if}
 
-    {#if mode === 'changed'}
-      <section class="mt-5 rounded-xl bg-accent-soft p-4"><p class="flex items-center gap-2 text-sm font-medium text-accent"><RefreshCw class="size-4" />Routine changed</p><p class="mt-2 text-xs leading-5 text-accent">Exercise order, set counts, rest timers, or routine notes differ from {routineName}. Choose what to keep.</p></section>
-    {:else if mode === 'one-off'}
-      <section class="mt-5 rounded-xl bg-canvas p-4"><p class="flex items-center gap-2 text-sm font-medium"><BookmarkPlus class="size-4" />One-off workout</p><p class="mt-2 text-xs leading-5 text-muted">Keep this session as one-off history or turn its structure into a reusable routine.</p></section>
-    {/if}
-
-    {#if mode !== 'routine'}
-      <label class="mt-5 block"><span class="text-xs font-medium uppercase text-muted">New routine name</span><input bind:value={newRoutineName} class="mt-2 min-h-12 w-full rounded-xl border-0 bg-canvas px-4 text-base outline-none placeholder:text-muted" placeholder="Routine name" aria-label="New routine name" /></label>
+    {#if mode === 'one-off'}
+      <section class="mt-5 rounded-xl bg-canvas p-4"><p class="flex items-center gap-2 text-sm font-medium"><BookmarkPlus class="size-4" />One-off workout</p><p class="mt-2 text-xs leading-5 text-muted">Keep this session as one-off history, or save its structure as a reusable routine.</p></section>
     {/if}
 
     <section class="mt-5" aria-labelledby="session-effort-heading">
@@ -93,15 +90,18 @@
 
     <label class="mt-5 block"><span class="text-xs font-medium uppercase">Workout notes</span><textarea bind:value={notes} class="mt-2 min-h-24 w-full resize-y rounded-xl border-0 bg-canvas p-4 text-base leading-6 outline-none placeholder:text-muted" placeholder="How did it feel?" aria-label="Workout notes"></textarea></label>
 
-    {#if mode === 'routine'}
-      <div class="mt-6 grid grid-cols-2 gap-2"><button class="min-h-12 rounded-xl bg-canvas px-4 text-sm font-medium" on:click={() => dialog.close()}>Cancel</button><button class="min-h-12 rounded-xl bg-accent px-4 text-sm font-medium text-accent-ink disabled:bg-panel-deep disabled:text-muted" disabled={sessionRpe === null} on:click={() => finish('routine')}>Finish workout</button></div>
-    {:else}
-      <div class="mt-6 grid gap-2">
-        {#if mode === 'changed'}<button class="min-h-12 rounded-xl bg-accent px-4 text-sm font-medium text-accent-ink disabled:bg-panel-deep disabled:text-muted" disabled={sessionRpe === null} on:click={() => finish('update-routine')}>Update {routineName}</button>{/if}
-        <button class="min-h-12 rounded-xl bg-ink px-4 text-sm font-medium text-paper disabled:bg-panel-deep disabled:text-muted" disabled={!newRoutineName.trim() || sessionRpe === null} on:click={() => finish('new-routine')}>Save as new routine</button>
-        <button class="min-h-12 rounded-xl bg-canvas px-4 text-sm font-medium disabled:text-muted" disabled={sessionRpe === null} on:click={() => finish('one-off')}>Finish as one-off</button>
-        <button class="min-h-11 text-sm text-muted" on:click={() => dialog.close()}>Cancel</button>
+    <details bind:open={templateOptionsOpen} class="mt-5 rounded-xl bg-canvas">
+      <summary class="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 px-4 text-sm font-medium"><span>Template options</span><span class="text-xs font-normal text-muted">Optional</span></summary>
+      <div class="border-t border-rule px-4 pb-4 pt-3">
+        <p class="text-xs leading-5 text-muted">{mode === 'routine' ? 'Save a copy of this session’s structure for future starts. Completing this workout keeps its current routine association.' : 'Save a copy of this session’s structure for future starts. The new template will be linked to this completed session.'}</p>
+        {#if mode === 'routine' && canUpdateTemplate}
+          <button class="mt-3 min-h-11 w-full rounded-xl bg-paper px-4 text-sm font-medium disabled:text-muted" disabled={sessionRpe === null} on:click={() => finish('update-routine')}>Update {routineName} template</button>
+        {/if}
+        <label class="mt-3 block"><span class="text-xs font-medium uppercase text-muted">New routine name</span><input bind:value={newRoutineName} class="mt-2 min-h-11 w-full rounded-xl border-0 bg-paper px-3 text-base outline-none placeholder:text-muted" placeholder="Routine name" aria-label="New routine name" /></label>
+        <button class="mt-3 min-h-11 w-full rounded-xl bg-ink px-4 text-sm font-medium text-paper disabled:bg-panel-deep disabled:text-muted" disabled={!newRoutineName.trim() || sessionRpe === null} on:click={() => finish('new-routine')}>Save as new routine</button>
       </div>
-    {/if}
+    </details>
+
+    <div class="mt-6 grid grid-cols-2 gap-2"><button class="min-h-12 rounded-xl bg-canvas px-4 text-sm font-medium" on:click={() => dialog.close()}>Cancel</button><button class="min-h-12 rounded-xl bg-accent px-4 text-sm font-medium text-accent-ink disabled:bg-panel-deep disabled:text-muted" disabled={sessionRpe === null} on:click={() => finish(mode === 'routine' ? 'routine' : 'one-off')}>{mode === 'routine' ? `Finish ${routineName}` : 'Finish one-off'}</button></div>
   </div>
 </dialog>

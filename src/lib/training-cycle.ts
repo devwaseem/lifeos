@@ -60,6 +60,15 @@ export function getCurrentCycleSlot(cycle: TrainingCycle | null | undefined) {
   return cycle.slots[cycle.currentIndex] ?? null
 }
 
+export function getCycleSlotForRoutine(
+  cycle: TrainingCycle | null | undefined,
+  routineId: string | null | undefined,
+) {
+  if (!routineId || !cycle || cycle.deletedAt) return null
+  const normalized = normalizeTrainingCycle(cycle)
+  return normalized.slots.find((slot) => slot.routineId === routineId) ?? null
+}
+
 export function getCycleRoutine(
   cycle: TrainingCycle | null | undefined,
   routines: RoutineTemplate[],
@@ -69,39 +78,31 @@ export function getCycleRoutine(
   return routines.find((routine) => routine.id === slot.routineId && !routine.deletedAt) ?? null
 }
 
-export function advanceTrainingCycle(
+function getCycleRoutineIndexForWorkout(
   cycle: TrainingCycle,
-  expectedSlotId: string,
-  timestamp = new Date().toISOString(),
+  workout: WorkoutSession,
+  allowLegacySlot = false,
 ) {
-  const normalized = normalizeTrainingCycle(cycle)
-  const current = getCurrentCycleSlot(normalized)
-  if (!current || current.id !== expectedSlotId) return normalized
-  return {
-    ...normalized,
-    currentIndex: (normalized.currentIndex + 1) % normalized.slots.length,
-    updatedAt: timestamp,
-  }
+  if (workout.routineId) return cycle.slots.findIndex((slot) => slot.routineId === workout.routineId)
+  if (allowLegacySlot && workout.cycleSlotId) return cycle.slots.findIndex((slot) => slot.id === workout.cycleSlotId)
+  return -1
 }
 
-export function setTrainingCyclePosition(
-  cycle: TrainingCycle,
-  currentIndex: number,
-  timestamp = new Date().toISOString(),
-) {
-  const normalized = normalizeTrainingCycle(cycle)
-  if (normalized.slots.length === 0) return normalized
-  const nextIndex = Math.min(normalized.slots.length - 1, Math.max(0, Math.round(currentIndex)))
-  return { ...normalized, currentIndex: nextIndex, updatedAt: timestamp }
-}
 
 export function advanceTrainingCycleForWorkout(
   cycle: TrainingCycle,
   workout: WorkoutSession,
   timestamp = new Date().toISOString(),
 ) {
-  if (workout.status !== 'completed' || !workout.cycleSlotId) return normalizeTrainingCycle(cycle)
-  return advanceTrainingCycle(cycle, workout.cycleSlotId, timestamp)
+  const normalized = normalizeTrainingCycle(cycle)
+  if (normalized.deletedAt || workout.status !== 'completed' || normalized.slots.length === 0) return normalized
+  const completedIndex = getCycleRoutineIndexForWorkout(normalized, workout)
+  if (completedIndex < 0) return normalized
+  return {
+    ...normalized,
+    currentIndex: (completedIndex + 1) % normalized.slots.length,
+    updatedAt: timestamp,
+  }
 }
 
 export function reconcileTrainingCycleAfterDeletedWorkouts(
@@ -109,12 +110,13 @@ export function reconcileTrainingCycleAfterDeletedWorkouts(
   workouts: WorkoutSession[],
 ) {
   const normalized = normalizeTrainingCycle(cycle)
+  if (normalized.deletedAt || normalized.slots.length === 0) return normalized
   const cycleUpdatedTime = new Date(normalized.updatedAt).getTime()
   let latestDeletion: WorkoutSession | null = null
   let latestDeletionTime = Number.NEGATIVE_INFINITY
 
   for (const workout of workouts) {
-    if (workout.status !== 'cancelled' || !workout.cycleSlotId || !workout.completedAt) continue
+    if (workout.status !== 'cancelled' || getCycleRoutineIndexForWorkout(normalized, workout, true) < 0 || !workout.completedAt) continue
     const completedTime = new Date(workout.completedAt).getTime()
     const deletionTime = new Date(workout.updatedAt).getTime()
     if (!Number.isFinite(completedTime) || !Number.isFinite(deletionTime) || deletionTime <= completedTime) continue
@@ -140,8 +142,8 @@ export function rewindTrainingCycleForDeletedWorkout(
   timestamp = new Date().toISOString(),
 ) {
   const normalized = normalizeTrainingCycle(cycle)
-  if (workout.status !== 'completed' || !workout.cycleSlotId || normalized.slots.length === 0) return normalized
-  const deletedIndex = normalized.slots.findIndex((slot) => slot.id === workout.cycleSlotId)
+  if (normalized.deletedAt || workout.status !== 'completed' || normalized.slots.length === 0) return normalized
+  const deletedIndex = getCycleRoutineIndexForWorkout(normalized, workout, true)
   if (deletedIndex < 0) return normalized
   const expectedCurrentIndex = (deletedIndex + 1) % normalized.slots.length
   if (normalized.currentIndex !== expectedCurrentIndex) return normalized
@@ -149,9 +151,11 @@ export function rewindTrainingCycleForDeletedWorkout(
   const deletedTime = new Date(workout.completedAt ?? workout.startedAt).getTime()
   if (!Number.isFinite(deletedTime)) return normalized
   const hasLaterCycleCompletion = workouts.some((candidate) => {
-    if (candidate.id === workout.id || candidate.status !== 'completed' || !candidate.cycleSlotId) return false
+    if (candidate.id === workout.id || candidate.status !== 'completed') return false
     const candidateTime = new Date(candidate.completedAt ?? candidate.startedAt).getTime()
-    return Number.isFinite(candidateTime) && candidateTime > deletedTime
+    return getCycleRoutineIndexForWorkout(normalized, candidate, true) >= 0
+      && Number.isFinite(candidateTime)
+      && candidateTime > deletedTime
   })
   if (hasLaterCycleCompletion) return normalized
 
@@ -176,7 +180,11 @@ export function removeRoutineFromTrainingCycle(
   return { ...normalized, slots, currentIndex, updatedAt: timestamp }
 }
 
-export function addRoutineCycleSlot(routineId: string): TrainingCycleSlot {
+export function addRoutineCycleSlot(
+  routineId: string,
+  existingSlots: TrainingCycleSlot[],
+): TrainingCycleSlot | null {
+  if (!routineId || existingSlots.some((slot) => slot.routineId === routineId)) return null
   return { id: newId(), routineId }
 }
 

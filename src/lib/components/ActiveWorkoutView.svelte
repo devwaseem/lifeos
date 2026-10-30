@@ -8,7 +8,6 @@
   import { buildExerciseProgressionResults, buildSetProgressionTargets, defaultProgressionRule } from '$lib/progression'
   import { getActiveRestTimer } from '$lib/rest-timer'
   import { getEquipmentWeightOptions } from '$lib/equipment-settings'
-  import { routineMatchesWorkout } from '$lib/routines'
   import { getWorkoutStrengthHighlights } from '$lib/training-science'
   import type { EquipmentSettings, ExerciseDefinition, RoutineTemplate, WorkoutExercise, WorkoutFinishDecision, WorkoutSession, WorkoutSet } from '$lib/types'
   import { DEFAULT_REST_SECONDS } from '$lib/workouts'
@@ -40,7 +39,7 @@
   let optionsOpen = false
   let expandedSetId: string | null = null
   let expandedCompletedExerciseIds = new Set<string>()
-  let finishMode: 'routine' | 'changed' | 'one-off' = 'one-off'
+  let finishMode: 'routine' | 'one-off' = 'one-off'
   let pendingDelete: { title: string; description: string; action: () => void } | null = null
   let maxEffortMoment: { id: number; exerciseName: string } | null = null
   let maxEffortSequence = 0
@@ -209,11 +208,9 @@
   })
   $: strengthHighlights = getWorkoutStrengthHighlights(workout, workouts)
   $: sourceRoutine = workout.routineId
-    ? routines.find((routine) => routine.id === workout.routineId && !routine.deletedAt)
+    ? routines.find((routine) => routine.id === workout.routineId)
     : undefined
-  $: finishMode = sourceRoutine
-    ? routineMatchesWorkout(sourceRoutine, workout) ? 'routine' : 'changed'
-    : 'one-off'
+  $: finishMode = workout.routineId ? 'routine' : 'one-off'
 
 
   $: completedSets = getCompletedSetCount(workout)
@@ -377,7 +374,7 @@
   {/key}
 {/if}
 
-<FinishWorkoutDialog bind:this={finishDialog} mode={finishMode} routineName={sourceRoutine?.name ?? ''} suggestedRoutineName={`${workout.title} routine`} description={finishDescription} initialNotes={workout.notes} highlights={finishHighlights} {strengthHighlights} progressionResults={finishProgressionResults} onConfirm={onFinish} />
+<FinishWorkoutDialog bind:this={finishDialog} mode={finishMode} routineName={sourceRoutine?.name ?? workout.title} canUpdateTemplate={Boolean(sourceRoutine && !sourceRoutine.deletedAt)} suggestedRoutineName={`${workout.title} routine`} description={finishDescription} initialNotes={workout.notes} highlights={finishHighlights} {strengthHighlights} progressionResults={finishProgressionResults} onConfirm={onFinish} />
 <ConfirmDialog bind:this={cancelDialog} eyebrow="Discard session" title="Cancel this workout?" description="The active session and its set data will be discarded. This cannot be undone." confirmLabel="Cancel workout" onConfirm={onCancel} />
 <ConfirmDialog bind:this={deleteDialog} title={pendingDelete?.title ?? 'Remove item?'} description={pendingDelete?.description ?? ''} onConfirm={() => pendingDelete?.action()} />
 
